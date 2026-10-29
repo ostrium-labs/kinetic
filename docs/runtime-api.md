@@ -52,6 +52,7 @@ The autoload singleton `Kinetic` is processed before scene nodes (`process_prior
 | `state(entity) -> Dictionary` | entity state at `tick`; `{}` if not alive |
 | `alive(entity) -> bool` | |
 | `active_span(entity) -> Dictionary` | `{span_id, kind, interp, outcome, begin_tick, end_tick, progress, ...attrs}`, or `{}`; span fields win over attrs of the same name |
+| `last_span(entity) -> Dictionary` | the entity's most recent span with `end_tick <= tick` (progress 1.0), or `{}`; Python twin `Trace.last_span_of`. Use it to show where an entity ended up (e.g. a delivered packet docked at its destination) without remembering state across frames |
 | `spans_active() -> Array` | all active spans, same dictionaries plus `entity` |
 | `signals_in(from_tick, to_tick) -> Array` | `signal` events with `from_tick < tick <= to_tick` |
 | `track(entity, node: Node3D)` | include the node's screen-space bbox in annotations |

@@ -98,6 +98,19 @@ class Trace:
             if span.begin_tick <= tick < span.end_tick
         ]
 
+    def last_span_of(self, entity: str, tick: int) -> Span | None:
+        """The entity's most recent span that has ended by `tick` (end_tick <= tick); ties go
+        to the later one in spans.jsonl order. Shows where an entity ended up."""
+        best: Span | None = None
+        for span in self.spans:
+            if (
+                span.entity == entity
+                and span.end_tick <= tick
+                and (best is None or span.end_tick >= best.end_tick)
+            ):
+                best = span
+        return best
+
     def active_span_of(self, entity: str, tick: int) -> ActiveSpan | None:
         found = [a for a in self.spans_active(tick) if a.span.entity == entity]
         if len(found) > 1:

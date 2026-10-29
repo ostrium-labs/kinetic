@@ -103,6 +103,23 @@ func spans_active(tick: int) -> Array:
 	return out
 
 
+## The entity's most recent span that has ended by `tick` (end_tick <= tick), as a span
+## view with progress 1.0, or {} if none. Lets a scene show where an entity ended up
+## (delivered, lost) as a pure function of the tick.
+func last_span(entity: String, tick: int) -> Dictionary:
+	var best: Dictionary = {}
+	for span: Dictionary in spans:
+		if span["entity"] != entity or int(span["end_tick"]) > tick:
+			continue
+		if best.is_empty() or int(span["end_tick"]) >= int(best["end_tick"]):
+			best = span
+	if best.is_empty():
+		return {}
+	var view := span_view(best, int(best["end_tick"]))
+	view["progress"] = 1.0
+	return view
+
+
 ## {span_id, kind, interp, outcome, begin_tick, end_tick, progress} plus the span's attrs.
 ## Span fields win over attrs with the same name.
 func span_view(span: Dictionary, tick: int) -> Dictionary:

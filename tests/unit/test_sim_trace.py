@@ -263,3 +263,28 @@ def test_load_detects_appended_line(cached_trace_dir: Path) -> None:
     path.write_bytes(b"".join([*lines, lines[-1]]))
     with pytest.raises(ValueError, match="sha256 mismatch"):
         Trace.load(cached_trace_dir)
+
+
+def test_last_span_of_returns_the_latest_ended_span() -> None:
+    from ostrium_kinetic.sim.runner import run_simulation
+
+    params = {
+        "latency_p_s": "1.5",
+        "latency_s_s": "1.2",
+        "ack_latency_s": "0.6",
+        "cut_p_at_s": "1.2",
+        "timeout_s": "1.5",
+        "reroute_delay_s": "0.1",
+        "jitter_ms": 20,
+        "end_s": "3.5",
+    }
+    root = Path(__file__).resolve().parents[2] / "examples" / "smoke-failover" / "sim"
+    bundle = run_simulation(root / "failover.py", params, 7)
+    from ostrium_kinetic.sim.model import Span
+
+    spans = [Span.model_validate_json(x) for x in bundle.spans_bytes.decode().splitlines()]
+    trace = Trace([], spans, bundle.meta)
+    assert trace.last_span_of("packet:2", 2811) is None
+    last = trace.last_span_of("packet:2", 2812)
+    assert last is not None and last.attrs["via"] == "link:S" and last.outcome == "completed"
+    assert trace.last_span_of("packet:1", 3000).outcome == "lost"  # type: ignore[union-attr]

@@ -91,6 +91,11 @@ func active_span(entity: String) -> Dictionary:
 	return _active_by_entity.get(entity, {}).duplicate()
 
 
+## The entity's most recent ended span (end_tick <= tick), progress 1.0, or {}.
+func last_span(entity: String) -> Dictionary:
+	return {} if trace == null else trace.last_span(entity, tick)
+
+
 ## All active spans, each with "entity".
 func spans_active() -> Array:
 	return _spans.duplicate(true)
