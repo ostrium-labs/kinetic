@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -55,7 +56,13 @@ def load_module(module_path: Path) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot import {module_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # dataclasses and typing resolve annotations through sys.modules[module.__name__].
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
     for attr in ("TICK_RATE", "run"):
         if not hasattr(module, attr):
             raise SimulationError(f"{module_path.name} must define {attr}")

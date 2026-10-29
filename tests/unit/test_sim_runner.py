@@ -73,11 +73,6 @@ def test_load_module_requires_tick_rate_and_run(tmp_path: Path, source: str, mis
         load_module(path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="load_module does not register the module in sys.modules before exec_module, so "
-    "a @dataclass in a sim using `from __future__ import annotations` raises AttributeError",
-)
 def test_load_module_supports_dataclasses(tmp_path: Path) -> None:
     path = tmp_path / "dc.py"
     path.write_text(
