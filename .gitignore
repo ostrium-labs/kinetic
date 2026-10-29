@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+dist/
+build/
+*.egg-info/
+
+# Kinetic generated artefacts: caches, traces, frames, mezzanines, logs, outputs
+.kinetic/
+out/
+*.png
+!tests/golden/**/*.png
+*.mkv
+*.mp4
+*.mov
+*.wav
+
+# Local machine configuration
+kinetic.toml
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Local agent tooling state
+.omc/

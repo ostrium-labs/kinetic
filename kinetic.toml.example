@@ -1,0 +1,15 @@
+# Copy to kinetic.toml (git-ignored) at your workspace root and edit for this machine.
+
+[tools]
+# Executables that are not on PATH. Environment variables KINETIC_GODOT, KINETIC_BLENDER,
+# KINETIC_FFMPEG, ... override these.
+godot = "C:/Users/<you>/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.7.2-stable_win64_console.exe"
+blender = "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+# ffmpeg = "C:/path/to/ffmpeg.exe"
+# ffprobe = "C:/path/to/ffprobe.exe"
+# manim = "C:/Users/<you>/.local/bin/manim.exe"
+# melt = "C:/Users/<you>/AppData/Local/Programs/Kdenlive/bin/melt.exe"
+
+[cache]
+dir = ".kinetic"
+max_gb = 40
