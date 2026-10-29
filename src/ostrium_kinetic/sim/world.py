@@ -161,10 +161,14 @@ class Recorder:
     def end(self, span_id: str, outcome: Outcome | str = Outcome.COMPLETED) -> None:
         if span_id not in self._open:
             raise SimulationError(f"span {span_id!r} is not open")
-        span = self._open.pop(span_id)
-        outcome = Outcome(outcome)
+        span = self._open[span_id]
+        try:
+            outcome = Outcome(outcome)
+        except ValueError as exc:
+            raise SimulationError(f"span {span_id!r}: unknown outcome {outcome!r}") from exc
         if self._world.now == span["begin_tick"] and span["interp"] != "step":
             raise SimulationError(f"span {span_id!r} has zero duration; use interp='step'")
+        del self._open[span_id]  # only once the end is known to be valid
         self._spans.append(
             Span(
                 span_id=span_id,

@@ -394,7 +394,7 @@ def test_finish_publishes_spans_in_begin_order(world: World, rec: Recorder) -> N
     assert [s.span_id for s in rec.finish()] == ["tx:long", "tx:short"]
 
 
-# -- known defects in src (strict xfail: these start passing once fixed) ----------------
+# -- regressions: a rejected call must leave the recorder unchanged -------------------
 
 
 def test_rejected_create_does_not_burn_the_id(rec: Recorder) -> None:
@@ -403,11 +403,6 @@ def test_rejected_create_does_not_burn_the_id(rec: Recorder) -> None:
     rec.create("node:A", role="r")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Recorder.end pops the open span before the zero-duration check, so after the "
-    "error the span is neither open nor resolved and finish() does not notice",
-)
 def test_rejected_end_keeps_span_open(rec: Recorder) -> None:
     rec.create("packet:1", status="x")
     rec.begin("tx:1", "packet:1", "transit")
