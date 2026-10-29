@@ -1,0 +1,597 @@
+{
+  "$defs": {
+    "Assumption": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Assumption",
+      "type": "object"
+    },
+    "Checkpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "at_frame": {
+          "minimum": 0,
+          "title": "At Frame",
+          "type": "integer"
+        },
+        "expect": {
+          "items": {
+            "$ref": "#/$defs/Expectation"
+          },
+          "minItems": 1,
+          "title": "Expect",
+          "type": "array"
+        }
+      },
+      "required": [
+        "at_frame",
+        "expect"
+      ],
+      "title": "Checkpoint",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "evidence"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Evidence": {
+      "description": "How we know what a shot or claim shows.",
+      "enum": [
+        "trace",
+        "measured",
+        "sourced",
+        "computed",
+        "simulated",
+        "hypothetical",
+        "illustrative"
+      ],
+      "title": "Evidence",
+      "type": "string"
+    },
+    "Expectation": {
+      "additionalProperties": false,
+      "description": "`field` is a state field (\"status\"), `active_span.<attr>` (\"active_span.via\"), or\n`active_span` itself, where `equals: null` means \"no active span\" and a string is\ncompared with the active span's id.",
+      "properties": {
+        "entity": {
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "equals": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Equals"
+        },
+        "field": {
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "field",
+        "equals"
+      ],
+      "title": "Expectation",
+      "type": "object"
+    },
+    "Framing": {
+      "additionalProperties": false,
+      "properties": {
+        "camera": {
+          "minLength": 1,
+          "title": "Camera",
+          "type": "string"
+        }
+      },
+      "required": [
+        "camera"
+      ],
+      "title": "Framing",
+      "type": "object"
+    },
+    "NarrationSegment": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "NarrationSegment",
+      "type": "object"
+    },
+    "Sequence": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "shots": {
+          "items": {
+            "$ref": "#/$defs/Shot"
+          },
+          "minItems": 1,
+          "title": "Shots",
+          "type": "array"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "shots"
+      ],
+      "title": "Sequence",
+      "type": "object"
+    },
+    "Shot": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoints": {
+          "items": {
+            "$ref": "#/$defs/Checkpoint"
+          },
+          "title": "Checkpoints",
+          "type": "array"
+        },
+        "claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "frames": {
+          "exclusiveMinimum": 0,
+          "title": "Frames",
+          "type": "integer"
+        },
+        "framings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Framing"
+          },
+          "propertyNames": {
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "title": "Framings",
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "minLength": 1,
+          "title": "Intent",
+          "type": "string"
+        },
+        "narration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Narration"
+        },
+        "renderer": {
+          "enum": [
+            "godot",
+            "blender",
+            "manim"
+          ],
+          "title": "Renderer",
+          "type": "string"
+        },
+        "scene": {
+          "minLength": 1,
+          "title": "Scene",
+          "type": "string"
+        },
+        "sim": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SimRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "timemap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeMap"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variant_calm": {
+          "default": false,
+          "title": "Variant Calm",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "intent",
+        "renderer",
+        "scene",
+        "evidence",
+        "frames",
+        "framings"
+      ],
+      "title": "Shot",
+      "type": "object"
+    },
+    "SimRef": {
+      "additionalProperties": false,
+      "properties": {
+        "module": {
+          "minLength": 1,
+          "title": "Module",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "seed": {
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "module",
+        "seed"
+      ],
+      "title": "SimRef",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "retrieved": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "TimeMap": {
+      "additionalProperties": false,
+      "description": "Linear map from a shot's frames onto [sim_start_s, sim_end_s] of simulated time.",
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "mode": {
+          "const": "linear",
+          "default": "linear",
+          "title": "Mode",
+          "type": "string"
+        },
+        "sim_end_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "description": "Exact rational: integer, decimal, or 'a/b' string.",
+          "title": "Sim End S"
+        },
+        "sim_start_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "description": "Exact rational: integer, decimal, or 'a/b' string.",
+          "title": "Sim Start S"
+        }
+      },
+      "required": [
+        "sim_start_s",
+        "sim_end_s"
+      ],
+      "title": "TimeMap",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "$ref": "#/$defs/Assumption"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "claims": {
+      "oneOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "type": "array"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Claims"
+    },
+    "fps": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+          "type": "string"
+        }
+      ],
+      "default": "30",
+      "description": "Exact rational: integer, decimal, or 'a/b' string.",
+      "title": "Fps"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "kinetic": {
+      "const": "0.1",
+      "title": "Kinetic",
+      "type": "string"
+    },
+    "narration": {
+      "items": {
+        "$ref": "#/$defs/NarrationSegment"
+      },
+      "title": "Narration",
+      "type": "array"
+    },
+    "sequences": {
+      "items": {
+        "$ref": "#/$defs/Sequence"
+      },
+      "minItems": 1,
+      "title": "Sequences",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "style": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Style"
+    },
+    "title": {
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kinetic",
+    "id",
+    "title",
+    "sequences"
+  ],
+  "title": "Film",
+  "type": "object"
+}

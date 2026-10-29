@@ -1,0 +1,241 @@
+{
+  "$defs": {
+    "Evidence": {
+      "description": "How we know what a shot or claim shows.",
+      "enum": [
+        "trace",
+        "measured",
+        "sourced",
+        "computed",
+        "simulated",
+        "hypothetical",
+        "illustrative"
+      ],
+      "title": "Evidence",
+      "type": "string"
+    },
+    "ShotPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_key": {
+          "title": "Cache Key",
+          "type": "string"
+        },
+        "camera": {
+          "title": "Camera",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "fps": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "description": "Exact rational: integer, decimal, or 'a/b' string.",
+          "title": "Fps"
+        },
+        "frame_count": {
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "frame_start": {
+          "title": "Frame Start",
+          "type": "integer"
+        },
+        "framing": {
+          "title": "Framing",
+          "type": "string"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "renderer": {
+          "enum": [
+            "godot",
+            "blender",
+            "manim"
+          ],
+          "title": "Renderer",
+          "type": "string"
+        },
+        "scene": {
+          "title": "Scene",
+          "type": "string"
+        },
+        "scene_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scene Sha256"
+        },
+        "sequence_id": {
+          "title": "Sequence Id",
+          "type": "string"
+        },
+        "shot_id": {
+          "title": "Shot Id",
+          "type": "string"
+        },
+        "tick_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tick End"
+        },
+        "tick_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tick Start"
+        },
+        "trace_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Dir"
+        },
+        "trace_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Sha256"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "shot_id",
+        "sequence_id",
+        "renderer",
+        "scene",
+        "framing",
+        "camera",
+        "frame_start",
+        "frame_count",
+        "fps",
+        "width",
+        "height",
+        "evidence",
+        "cache_key"
+      ],
+      "title": "ShotPlan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "film_id": {
+      "title": "Film Id",
+      "type": "string"
+    },
+    "film_sha256": {
+      "title": "Film Sha256",
+      "type": "string"
+    },
+    "fps": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+          "type": "string"
+        }
+      ],
+      "description": "Exact rational: integer, decimal, or 'a/b' string.",
+      "title": "Fps"
+    },
+    "height": {
+      "title": "Height",
+      "type": "integer"
+    },
+    "kinetic_version": {
+      "title": "Kinetic Version",
+      "type": "string"
+    },
+    "profile": {
+      "title": "Profile",
+      "type": "string"
+    },
+    "shots": {
+      "items": {
+        "$ref": "#/$defs/ShotPlan"
+      },
+      "title": "Shots",
+      "type": "array"
+    },
+    "total_frames": {
+      "title": "Total Frames",
+      "type": "integer"
+    },
+    "width": {
+      "title": "Width",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "kinetic_version",
+    "film_id",
+    "profile",
+    "width",
+    "height",
+    "fps",
+    "total_frames",
+    "shots",
+    "film_sha256"
+  ],
+  "title": "RenderPlan",
+  "type": "object"
+}

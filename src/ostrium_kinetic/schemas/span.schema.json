@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "Outcome": {
+      "enum": [
+        "completed",
+        "lost",
+        "aborted"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One line of spans.jsonl: a resolved interval, so renderers never need lookahead.\n\ninterp:\n  \"step\"         no continuous progress; the span is simply active\n  \"linear\"       progress = (t - begin) / (end - begin)\n  \"curve:<name>\" piecewise-linear over `keys` [(u, progress)], u = normalised time",
+  "properties": {
+    "attrs": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Attrs",
+      "type": "object"
+    },
+    "begin_tick": {
+      "minimum": 0,
+      "title": "Begin Tick",
+      "type": "integer"
+    },
+    "end_tick": {
+      "minimum": 0,
+      "title": "End Tick",
+      "type": "integer"
+    },
+    "entity": {
+      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9_.-]+$",
+      "title": "Entity",
+      "type": "string"
+    },
+    "interp": {
+      "title": "Interp",
+      "type": "string"
+    },
+    "keys": {
+      "anyOf": [
+        {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+                    "type": "string"
+                  }
+                ],
+                "description": "Exact rational: integer, decimal, or 'a/b' string."
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+                    "type": "string"
+                  }
+                ],
+                "description": "Exact rational: integer, decimal, or 'a/b' string."
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Keys"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "span_id": {
+      "title": "Span Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "span_id",
+    "entity",
+    "kind",
+    "begin_tick",
+    "end_tick",
+    "outcome",
+    "interp"
+  ],
+  "title": "Span",
+  "type": "object"
+}

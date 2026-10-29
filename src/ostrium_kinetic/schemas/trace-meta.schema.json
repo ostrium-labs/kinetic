@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "SimSource": {
+      "additionalProperties": false,
+      "properties": {
+        "module": {
+          "title": "Module",
+          "type": "string"
+        },
+        "source_sha256": {
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "source_sha256"
+      ],
+      "title": "SimSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "end_tick": {
+      "title": "End Tick",
+      "type": "integer"
+    },
+    "entity_types": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "title": "Entity Types",
+      "type": "object"
+    },
+    "event_count": {
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "files": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Files",
+      "type": "object"
+    },
+    "kinetic_version": {
+      "title": "Kinetic Version",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": true,
+      "title": "Params",
+      "type": "object"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "sim": {
+      "$ref": "#/$defs/SimSource"
+    },
+    "span_count": {
+      "title": "Span Count",
+      "type": "integer"
+    },
+    "tick_rate": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^-?\\d+(\\.\\d+)?(/\\d+)?$",
+          "type": "string"
+        }
+      ],
+      "description": "Exact rational: integer, decimal, or 'a/b' string.",
+      "title": "Tick Rate"
+    }
+  },
+  "required": [
+    "kinetic_version",
+    "tick_rate",
+    "end_tick",
+    "seed",
+    "params",
+    "sim",
+    "entity_types",
+    "event_count",
+    "span_count",
+    "files"
+  ],
+  "title": "TraceMeta",
+  "type": "object"
+}
