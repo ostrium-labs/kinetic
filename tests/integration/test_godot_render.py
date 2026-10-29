@@ -168,8 +168,10 @@ def test_annotations_match_trace(
                 assert span["via"] == active.span.attrs["via"]
                 assert span["progress"] == pytest.approx(float(active.progress), abs=1e-9)
             if entity.startswith("packet:"):
-                # A pulse is drawn exactly while its packet is in transit.
-                assert got["visible"] == (active is not None), (f, entity)
+                # A pulse is drawn while its packet is in transit, and stays docked at the
+                # destination once delivered; a lost packet is not drawn.
+                delivered = state.get(entity, {}).get("status") == "delivered"
+                assert got["visible"] == (active is not None or delivered), (f, entity)
             else:
                 assert got["visible"] and got["bbox"] is not None, (f, entity)
 
