@@ -138,6 +138,21 @@ def test_sha256_tree_sees_renames_and_edits(tmp_path: Path) -> None:
     assert sha256_tree(root) != edited
 
 
+def test_sha256_tree_orders_by_posix_string_not_path(tmp_path: Path) -> None:
+    """Path comparison is case-insensitive on Windows; the hash must use str order."""
+    root = tmp_path / "t"
+    names = ["b2.py", "a.py", "C/x.py", "B.py", "c.py"]
+    for name in names:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(name.encode() + b"\n")
+    expected_order = ["B.py", "C/x.py", "a.py", "b2.py", "c.py"]
+    assert sorted(names) == expected_order
+    entries = [[n, sha256_file(root / n)] for n in expected_order]
+    assert sha256_tree(root) == canonical.sha256_json(entries)
+    shuffled = [root / n for n in reversed(names)]
+    assert sha256_tree(root, shuffled) == canonical.sha256_json(entries)
+
+
 def test_sha256_tree_with_explicit_file_list(tmp_path: Path) -> None:
     root = tmp_path / "t"
     _make_tree(root)

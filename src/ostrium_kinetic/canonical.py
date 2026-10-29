@@ -96,9 +96,12 @@ def sha256_file(path: Path) -> str:
 
 
 def sha256_tree(root: Path, files: Iterable[Path] | None = None) -> str:
-    """Hash a directory tree (relative path + normalised content of every file)."""
-    paths = sorted(files if files is not None else (p for p in root.rglob("*") if p.is_file()))
-    entries = [[p.relative_to(root).as_posix(), sha256_file(p)] for p in paths]
+    """Hash a directory tree (relative path + normalised content of every file).
+
+    Entries are ordered by their relative POSIX path as a plain string, never by Path
+    comparison, which is case-insensitive on Windows and would change the hash per platform."""
+    paths = files if files is not None else (p for p in root.rglob("*") if p.is_file())
+    entries = sorted([p.relative_to(root).as_posix(), sha256_file(p)] for p in paths)
     return sha256_json(entries)
 
 
