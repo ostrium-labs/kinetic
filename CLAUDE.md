@@ -2,9 +2,11 @@
 
 Kinetic (`ostrium_kinetic`, CLI `kinetic`) turns deterministic simulations, traces and
 measurements into reproducible technical films. A simulation writes a typed, integer-tick
-trace; renderers (Godot, Blender, Manim, from M2) sample that trace at integer frame times.
-Current milestone: **M1** (contract, sim core, timeline, plan compiler, doctor, CI). No renderer
-adapter exists yet, so Kinetic does not produce video.
+trace; renderers sample that trace at integer frame times.
+Current milestone: **M2**. The Godot adapter renders shots to verified frames; the pipeline
+(`render`, `assemble`, `qa`, `build`) encodes FFV1 mezzanines, assembles a master and a
+delivery file, runs QA (`docs/qa.md`) and writes `provenance.json`. Blender and Manim
+adapters arrive in M4.
 
 ## Commands
 
@@ -34,7 +36,7 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 
 - Never hand-edit `src/ostrium_kinetic/schemas/`. Change the pydantic models, then run
   `uv run kinetic schema`. CI runs `kinetic schema --check`.
-- A renderer exit code is never success. From M2, QA (structural probes, semantic
+- A renderer exit code is never success. QA (structural probes, semantic
   checkpoints, viewed contact sheets) decides whether a shot passed.
 - Every number on screen cites a claim id in the claims ledger. Shots and claims carry an
   evidence class (`docs/evidence-policy.md`).
@@ -47,8 +49,9 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 - Blender runtime code (`renderers/blender/`, M4) is GPL-2.0-or-later and never imports
   `ostrium_kinetic`; it talks to the core only through job/trace JSON files.
 - No AI-attribution lines in commits, PR bodies or files.
-- `tests/golden/smoke-failover.trace.sha256` is the cross-platform determinism gate. If it
-  changes, the trace contract changed; treat that as a breaking change, not a test update.
+- `tests/golden/smoke-failover.trace.sha256` and `smoke-failover.spans.sha256` are the
+  cross-platform determinism gates (trace and resolved spans). If either changes, the trace
+  contract changed; treat that as a breaking change, not a test update.
 
 ## Source map (`src/ostrium_kinetic/`)
 
@@ -58,7 +61,8 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 | `timeline.py` | Fraction fps, frame <-> seconds, seconds -> ticks, `ShotClock` (frame -> sim tick) |
 | `workspace.py` | Finds the workspace root and `kinetic.toml`; cache directory |
 | `log.py` | structlog JSON lines to `<cache>/logs/` |
-| `cli/main.py` | typer app: `doctor`, `validate`, `sim`, `plan`, `schema`; thin wrappers only |
+| `proc.py` | Runs an external tool with output captured and a timeout that kills the whole process tree |
+| `cli/main.py` | typer app: `doctor`, `validate`, `sim`, `plan`, `render`, `assemble`, `qa`, `build`, `schema`; thin wrappers only |
 | `contract/models.py` | pydantic v2 film contract (film, shot, claim, evidence, timemap, checkpoint, profile) |
 | `contract/loader.py` | Reads `film.yaml` (+ claims file) into models with readable errors |
 | `contract/validate.py` | Cross-refs, evidence rules, timemap labels, runs sims, evaluates checkpoints |
@@ -69,11 +73,19 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 | `sim/runner.py` | Loads a sim module, runs it, content-addressed trace cache (`ensure_trace`) |
 | `plan/simulate.py` | Runs a film's simulations into the trace cache |
 | `plan/compiler.py` | Compiles `render-plan.json` with a cache key per shot |
+| `job.py` | Core/renderer boundary: `ShotJob` (job.json), `FrameAnnotation`, `ShotResult` (shot.json), `RendererAdapter` |
+| `pipeline.py` | Render (cached by render key) -> mezzanine -> assemble -> QA -> provenance |
+| `adapters/godot.py` | Godot 4.7 adapter: per-run project, Movie Maker run, strict output check |
+| `media/` | ffmpeg/ffprobe resolution and runs, FFV1 mezzanine, concat master, delivery encode, probes |
+| `qa/` | Frame, annotation (parity, checkpoints, layout) and media checks; contact sheets, stills, `report.json` |
+| `provenance.py` | `provenance.json`: a deterministic part (inputs, keys, tool versions) plus outputs and environment |
 | `schema_export.py` | Generates the JSON Schemas in `schemas/` from the models |
 | `env/` | `kinetic doctor`: tool discovery, checks, hardware facts, `--deep` probes |
 
-Other places: `examples/smoke-failover/` (film.yaml + `sim/failover.py`), `tests/unit/`,
-`tests/golden/`, `docs/` (contract, evidence policy, Windows setup, ADRs), `.claude/skills/`.
+Other places: `renderers/godot/` (the Godot runtime project, `addons/kinetic_runtime/`: trace
+sampler, runner, `Kinetic` annotation API), `examples/smoke-failover/` (film.yaml,
+`sim/failover.py`, `scenes/godot/`), `tests/unit/`, `tests/integration/` (need Godot and FFmpeg;
+skipped when absent), `tests/golden/`, `docs/`, `.claude/`.
 
 ## Windows notes
 
@@ -93,7 +105,10 @@ Other places: `examples/smoke-failover/` (film.yaml + `sim/failover.py`), `tests
 
 - `docs/architecture-proposal.md`: full design, trace contract v0.1 (section 7), milestones
   (section 14), M0 results (end of file).
-- `docs/adr/`: decisions 0001-0005.
-- `docs/contract.md`, `docs/evidence-policy.md`, `docs/windows-setup.md`.
-- Skills: `.claude/skills/film-director/` (sources -> claims -> shot list) and
-  `.claude/skills/scene-architect/` (simulation, timemap, checkpoints).
+- `docs/adr/`: decisions 0001-0006.
+- `docs/contract.md`, `docs/evidence-policy.md`, `docs/windows-setup.md`,
+  `docs/runtime-api.md` (renderer runtime API), `docs/qa.md` (every QA check and where it runs).
+- Skills in `.claude/skills/`: `film-director` (sources -> claims -> shot list),
+  `scene-architect` (simulation, timemap, checkpoints), `godot-scene` (Godot scenes on the
+  runtime API), `render-and-verify` (render, read QA, view stills and contact sheets).
+- Agent: `.claude/agents/film-critic.md` (independent critique of a rendered film).
