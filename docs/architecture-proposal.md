@@ -97,7 +97,7 @@ The proposed pipeline is right in spirit, but it is missing two boundaries: a **
 - **Media processing** is FFmpeg's job: assembly, mix and encode.
 - **Human review** happens at three gates: claims approved, animatic approved, final approved.
 
-**Evidence classes** (a closed enum; displayed on screen when they are not `trace`/`measured`):
+**Evidence classes** (a closed enum). `measured`, `sourced`, `simulated` and `hypothetical` always carry an on-screen badge; a measurement is shown with what was measured, so the viewer can tell an Ostrium spike from a vendor figure. `trace` and `computed` carry none (their source or inputs are shown instead), and `illustrative` carries none because it may not encode quantities:
 
 | Class | Meaning | Example (pilot) | On-screen badge |
 |---|---|---|---|
