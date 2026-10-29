@@ -318,3 +318,16 @@ def test_annotations_layout_occlusion(tmp_path: Path, trace: Trace) -> None:
     assert occ.status == "warn"
     assert "badge" in occ.detail and "node:A" in occ.detail
     assert "clear" not in occ.detail
+
+
+def test_clutter_rule_ignores_badge_and_time_label(tmp_path: Path, trace: Trace) -> None:
+    job = _job().model_copy(update={"evidence": "simulated", "time_label": "time slowed 3.4x"})
+    frames = _annotate(job, trace)
+    box = (40.0, 100.0, 300.0, 140.0)
+    chrome = [("SIMULATED · model", box), ("time slowed 3.4x", box)]
+    frames[2].labels = chrome + [(f"l{i}", box) for i in range(4)]  # 4 content labels: fine
+    frames[3].labels = chrome + [(f"l{i}", box) for i in range(5)]  # 5: clutter
+    path = _write(tmp_path / "a.jsonl", frames)
+    clutter = _by_id(check_annotations(job, path, trace, [], "S1"))["annotations.layout.clutter"]
+    assert clutter.status == "warn"
+    assert "frame 3" in clutter.detail and "frame 2" not in clutter.detail

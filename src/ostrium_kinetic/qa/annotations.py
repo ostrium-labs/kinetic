@@ -166,6 +166,14 @@ def _checkpoint(cp: Checkpoint, ann: FrameAnnotation | None, shot_id: str) -> Qa
     )
 
 
+def _is_chrome(text: str, job: ShotJob) -> bool:
+    """The evidence badge and the time-scale label are standing chrome required by the
+    evidence policy, not explanatory labels, so the clutter rule does not count them."""
+    if job.time_label and job.time_label in text:
+        return True
+    return bool(job.evidence) and text.strip().upper().startswith(str(job.evidence).upper())
+
+
 OCCLUSION_SHARE = 0.10  # share of the smaller rectangle; above this a label hides an entity
 # A bbox only approximates compact things (nodes, packets). A long or curved entity (a link)
 # has a box much larger than its pixels, so occlusion is checked only against entities whose
@@ -198,8 +206,9 @@ def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[Q
     labels = 0
     for ann in frames:
         boxes = [(eid, e.bbox) for eid, e in ann.entities.items() if e.visible and e.bbox]
-        if len(ann.labels) > MAX_LABELS:
-            cluttered.append(f"frame {ann.frame}: {len(ann.labels)} labels")
+        content = [t for t, _ in ann.labels if not _is_chrome(t, job)]
+        if len(content) > MAX_LABELS:
+            cluttered.append(f"frame {ann.frame}: {len(content)} labels")
         for text, (x0, y0, x1, y1) in ann.labels:
             labels += 1
             where = f"frame {ann.frame} {text!r} [{x0:g},{y0:g},{x1:g},{y1:g}]"
@@ -248,7 +257,8 @@ def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[Q
             "annotations.layout.clutter",
             shot_id,
             "warn" if cluttered else "pass",
-            f"more than {MAX_LABELS} labels on {len(cluttered)} frames: {_first(cluttered)}"
+            f"more than {MAX_LABELS} labels (badge and time label excluded) "
+            f"on {len(cluttered)} frames: {_first(cluttered)}"
             if cluttered
             else f"at most {MAX_LABELS} labels per frame",
             frames=cluttered[:50],
