@@ -301,3 +301,20 @@ def test_trace_observed_matches_validate_semantics(trace: Trace) -> None:
         assert tick is not None
         for exp in cp.expect:
             assert matches(trace_observed(trace, exp, tick), exp.equals)
+
+
+def test_annotations_layout_occlusion(tmp_path: Path, trace: Trace) -> None:
+    from ostrium_kinetic.job import EntityAnnotation
+
+    job = _job()
+    frames = _annotate(job, trace)
+    frames[3].entities["node:A"] = EntityAnnotation(visible=True, bbox=(100.0, 100.0, 200.0, 200.0))
+    frames[3].labels = [("badge", (90.0, 120.0, 260.0, 160.0))]  # sits on node A
+    frames[4].entities["node:A"] = EntityAnnotation(visible=True, bbox=(100.0, 100.0, 200.0, 200.0))
+    frames[4].labels = [("clear", (300.0, 120.0, 420.0, 160.0))]  # beside it
+    path = _write(tmp_path / "a.jsonl", frames)
+    c = _by_id(check_annotations(job, path, trace, [], "S1"))
+    occ = c["annotations.layout.occlusion"]
+    assert occ.status == "warn"
+    assert "badge" in occ.detail and "node:A" in occ.detail
+    assert "clear" not in occ.detail

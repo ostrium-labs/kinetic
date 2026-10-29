@@ -166,6 +166,25 @@ def _checkpoint(cp: Checkpoint, ann: FrameAnnotation | None, shot_id: str) -> Qa
     )
 
 
+OCCLUSION_SHARE = 0.10  # share of the smaller rectangle; above this a label hides an entity
+# A bbox only approximates compact things (nodes, packets). A long or curved entity (a link)
+# has a box much larger than its pixels, so occlusion is checked only against entities whose
+# box is at most this many times the label's area.
+OCCLUSION_MAX_AREA_RATIO = 4.0
+
+
+def _overlap_share(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+) -> float:
+    """Intersection area as a share of the smaller of two (x0, y0, x1, y1) rectangles."""
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    if w <= 0 or h <= 0:
+        return 0.0
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return (w * h) / smaller if smaller > 0 else 0.0
+
+
 def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[QaCheck]:
     w, h = job.width, job.height
     tall = job.framing == "9:16"
@@ -175,8 +194,10 @@ def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[Q
     unsafe: list[str] = []
     small: list[str] = []
     cluttered: list[str] = []
+    occluding: list[str] = []
     labels = 0
     for ann in frames:
+        boxes = [(eid, e.bbox) for eid, e in ann.entities.items() if e.visible and e.bbox]
         if len(ann.labels) > MAX_LABELS:
             cluttered.append(f"frame {ann.frame}: {len(ann.labels)} labels")
         for text, (x0, y0, x1, y1) in ann.labels:
@@ -188,6 +209,13 @@ def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[Q
                 unsafe.append(where)
             if y1 - y0 < min_h:
                 small.append(f"{where} height {y1 - y0:g} px")
+            label_area = max((x1 - x0) * (y1 - y0), 1.0)
+            for eid, box in boxes:
+                bx0, by0, bx1, by1 = box
+                if (bx1 - bx0) * (by1 - by0) > OCCLUSION_MAX_AREA_RATIO * label_area:
+                    continue  # too large for a bbox to stand in for its pixels
+                if _overlap_share((x0, y0, x1, y1), box) > OCCLUSION_SHARE:
+                    occluding.append(f"{where} covers {eid}")
     out = [
         check(
             "annotations.layout.bounds",
@@ -206,6 +234,15 @@ def _layout(job: ShotJob, frames: list[FrameAnnotation], shot_id: str) -> list[Q
             if small
             else f"labels >= {min_h:g} px high",
             labels=small[:50],
+        ),
+        check(
+            "annotations.layout.occlusion",
+            shot_id,
+            "warn" if occluding else "pass",
+            f"{len(occluding)} label placements cover a tracked entity: {_first(occluding)}"
+            if occluding
+            else "no label covers a tracked entity",
+            labels=occluding[:50],
         ),
         check(
             "annotations.layout.clutter",
