@@ -4,7 +4,7 @@
 
 Kinetic turns simulations, traces and measurements into reproducible technical films. Every moving thing on screen is either data, or labelled as not data.
 
-> Status: **v0.1 in development (M1).** The contract, simulation core, plan compiler and environment doctor exist. No renderer adapter exists yet, so Kinetic does not produce video yet. See `docs/architecture-proposal.md` for the full design and roadmap.
+> Status: **v0.1 in development, M2 in progress.** The contract, simulation core, plan compiler and environment doctor exist (M1). M2 adds the Godot renderer adapter, lossless FFV1 mezzanines, assembly, QA (`docs/qa.md`) and provenance, proven on `examples/smoke-failover` and the 1080p look-development clip `examples/lookdev-failover`. See `docs/architecture-proposal.md` for the full design and roadmap.
 
 ## How it works
 
@@ -38,6 +38,10 @@ Tool paths that are not on `PATH` go in a local `kinetic.toml` (see `kinetic.tom
 | `kinetic validate <film>` | Validates the schema and cross-references, runs the simulations, and evaluates shot checkpoints against the traces |
 | `kinetic sim <film> [--shot ID]` | Runs simulations into the trace cache |
 | `kinetic plan <film> --profile P` | Compiles `render-plan.json` with per-shot cache keys |
+| `kinetic render <film> --profile P [--shot ID] [--force] [--keep-frames] [--calm]` | Renders stale shots (cached by render key) to frames, checks frames and annotations, and encodes a lossless FFV1 mezzanine per shot |
+| `kinetic assemble <film> --profile P` | Concatenates the shot mezzanines into `master.mkv`, encodes `film.mp4` (or `social-9x16.mp4`), writes contact sheets, runs QA and writes provenance |
+| `kinetic qa <film> --profile P` | Reports per-shot QA from the cache to `out/<film_id>/<profile>/qa/report.json`; exit 1 on any failure |
+| `kinetic build <film> --profile P` | Render, assemble, QA and provenance in one command |
 | `kinetic schema [--check]` | Regenerates or verifies the committed JSON Schemas |
 
 ## License

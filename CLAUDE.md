@@ -14,6 +14,11 @@ uv run kinetic doctor [--json] [--deep]         # tool discovery, versions, shad
 uv run kinetic validate examples/smoke-failover # schema, cross-refs, evidence rules, sims, checkpoints
 uv run kinetic sim examples/smoke-failover [--shot S1] [--force]   # run sims into the trace cache
 uv run kinetic plan examples/smoke-failover --profile preview      # render-plan.json + cache keys
+uv run kinetic render examples/smoke-failover --profile preview [--shot S1] [--force] [--keep-frames] [--calm]
+                                                # frames -> frame/annotation QA -> FFV1 mezzanine, per shot
+uv run kinetic assemble examples/smoke-failover --profile preview  # master.mkv, film.mp4, contact sheets, QA, provenance
+uv run kinetic qa examples/smoke-failover --profile preview        # out/<film_id>/<profile>/qa/report.json; 1 on any fail
+uv run kinetic build examples/smoke-failover --profile preview     # render + assemble + qa + provenance
 uv run kinetic schema [--check]                 # regenerate / verify the committed JSON Schemas
 uv run pytest -m "not renderer"                 # unit suites (renderer tests skip without tools)
 uv run ruff check && uv run ruff format --check
@@ -21,7 +26,9 @@ uv run pyright
 ```
 
 Exit codes: 0 success, 1 a check or validation failed, 2 usage or runtime error.
-Generated files go to `.kinetic/` (cache, traces, plans, logs) and `out/`; both are git-ignored.
+Generated files go to `.kinetic/` (cache, traces, plans, logs, `shots/<key16>/` run directories)
+and `out/<film_id>/<profile>/`; both are git-ignored. A zero exit from `render` or `build` is not
+success: read `qa/report.json` and view the stills and contact sheets (`render-and-verify` skill).
 
 ## Hard rules
 
