@@ -42,7 +42,7 @@ def run(ctx: SimContext) -> None:
 
     def send(packet: str, link: str, src: str, dst: str, payload: str, latency: int) -> None:
         rec.create(packet, status="in_flight", payload=payload)
-        rec.begin(f"tx:{packet}", packet, "transit", **{"from": src, "to": dst, "via": link})
+        rec.begin(f"tx:{packet}", packet, "transit", attrs={"from": src, "to": dst, "via": link})
         world.after(latency, arrive, packet, link, dst)
 
     def arrive(packet: str, link: str, dst: str) -> None:

@@ -414,3 +414,18 @@ def test_rejected_end_keeps_span_open(rec: Recorder) -> None:
 def test_entity_id_with_trailing_newline_rejected_as_simulation_error(rec: Recorder) -> None:
     with pytest.raises(SimulationError, match="bad entity id"):
         rec.create("node:A\n", role="r")
+
+
+def test_begin_accepts_reserved_attribute_names_via_attrs(rec: Recorder) -> None:
+    rec.create("packet:1", status="x")
+    rec.begin("tx:1", "packet:1", "transit", attrs={"from": "node:A", "kind": "bulk"}, via="link:P")
+    event = rec.events[-1]
+    assert event.attrs == {"from": "node:A", "kind": "bulk", "via": "link:P"}
+    assert event.kind == "transit"
+
+
+def test_begin_rejects_attribute_given_twice(rec: Recorder) -> None:
+    rec.create("packet:1", status="x")
+    with pytest.raises(SimulationError, match="given twice"):
+        rec.begin("tx:1", "packet:1", "transit", attrs={"via": "a"}, via="b")
+    assert not rec.is_open("tx:1")

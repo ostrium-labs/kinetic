@@ -131,8 +131,15 @@ class Recorder:
         kind: str,
         interp: str = "linear",
         keys: Sequence[tuple[Any, Any]] | None = None,
-        **attrs: Scalar,
+        attrs: Mapping[str, Scalar] | None = None,
+        **kw_attrs: Scalar,
     ) -> None:
+        """Open a span. Attributes go in `attrs` (needed for names like "from", "kind" or
+        "interp") and/or as keyword arguments; a name given both ways is an error."""
+        clash = set(attrs or {}) & set(kw_attrs)
+        if clash:
+            raise SimulationError(f"span {span_id!r}: attribute(s) given twice: {sorted(clash)}")
+        attrs = {**(attrs or {}), **kw_attrs}
         self._require_alive(entity)
         if span_id in self._span_ids:
             raise SimulationError(f"span id {span_id!r} reused")
