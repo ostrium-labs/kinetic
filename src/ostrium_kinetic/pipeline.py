@@ -75,13 +75,11 @@ def render_key(
 ) -> str:
     """Identity of a shot's run directory: everything that can change its pixels (the plan's
     shot key, the scene directory, the renderer-side runtime and version, the reduced-motion
-    variant) plus what its stored QA was judged against (shot id and checkpoints), so editing
-    a checkpoint re-checks instead of reusing a stale verdict."""
+    variant). QA verdicts are not part of it: annotation checks are re-evaluated on every run
+    from the kept annotations.jsonl, so editing a checkpoint or a QA rule never re-renders."""
     return canonical.sha256_json(
         {
             "contract": CONTRACT_VERSION,
-            "shot_id": shot.id,
-            "checkpoints": [c.model_dump(mode="json") for c in shot.checkpoints],
             "plan_key": plan_shot.cache_key,
             "scene_tree": _scene_tree_sha(loaded, shot),
             "runtime": adapter.runtime_sha256(),
@@ -190,10 +188,35 @@ class RenderOutcome:
 
     @property
     def ok(self) -> bool:
-        return all(s.result.status == "mezzanine_ok" for s in self.shots)
+        return all(
+            s.result.status == "mezzanine_ok" and not any(c.status == "fail" for c in s.checks)
+            for s in self.shots
+        )
 
 
 Progress = Callable[[str], None]
+
+
+def _recheck_annotations(
+    run_dir: Path, ws: Workspace, plan_shot: ShotPlan, shot: Shot
+) -> list[QaCheck]:
+    """Re-run annotation QA for a cached shot against today's checkpoints and QA rules; the
+    frame and mezzanine checks from render time stand, since the pixels have not changed."""
+    from ostrium_kinetic.qa.annotations import check_annotations
+
+    kept = [c for c in read_checks(run_dir) if not c.id.startswith("annotations.")]
+    job_path = run_dir / JOB_FILE
+    if not job_path.is_file():
+        return kept
+    job = ShotJob.model_validate_json(job_path.read_text("utf-8"))
+    trace_dir = _resolve(ws, plan_shot.trace_dir)
+    trace = Trace.load(trace_dir) if trace_dir is not None else None
+    fresh = check_annotations(
+        job, run_dir / ANNOTATIONS_FILE, trace, shot.checkpoints, plan_shot.shot_id
+    )
+    checks = kept + fresh
+    _write_checks(run_dir, checks)
+    return checks
 
 
 def _shot_spec(loaded: LoadedFilm, shot_id: str) -> Shot:
@@ -248,7 +271,8 @@ def render_film(
             and (run_dir / MEZZANINE_FILE).is_file()
         ):
             progress(f"{plan_shot.shot_id}: cached ({key[:12]})")
-            outcomes.append(ShotOutcome(plan_shot, run_dir, previous, True, read_checks(run_dir)))
+            checks = _recheck_annotations(run_dir, ws, plan_shot, shot)
+            outcomes.append(ShotOutcome(plan_shot, run_dir, previous, True, checks))
             continue
         if collect_only:
             missing = ShotResult(
@@ -312,7 +336,11 @@ def render_film(
         )
         still_frames = {0, plan_shot.frame_count // 2, plan_shot.frame_count - 1}
         still_frames |= {c.at_frame for c in shot.checkpoints}
-        if not any(c.status == "fail" for c in checks):
+        # Only broken frames block the mezzanine. Annotation failures (a wrong checkpoint, a
+        # label in the wrong place) are verdicts on good pixels: they are re-checked on later
+        # runs without re-rendering, and they still keep the film from assembling.
+        frames_ok = not any(c.status == "fail" and c.id.startswith("frames.") for c in checks)
+        if frames_ok:
             keep_stills(frames_dir, run_dir / STILLS_DIR, sorted(still_frames))
             assert tools is not None
             encode_mezzanine(
@@ -327,10 +355,10 @@ def render_film(
                 plan_shot.shot_id,
             )
         _write_checks(run_dir, checks)
-        failures = [c for c in checks if c.status == "fail"]
-        if failures:
+        blocking = [c for c in checks if c.status == "fail" and not c.id.startswith("annotations.")]
+        if blocking:
             result = result.model_copy(
-                update={"status": "failed", "error": "; ".join(c.detail for c in failures[:3])}
+                update={"status": "failed", "error": "; ".join(c.detail for c in blocking[:3])}
             )
         else:
             result = result.model_copy(update={"status": "mezzanine_ok"})
