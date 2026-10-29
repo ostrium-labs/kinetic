@@ -73,12 +73,15 @@ def render_key(
     *,
     calm: bool,
 ) -> str:
-    """Everything that can change a shot's pixels: the plan's shot key (spec, profile, trace,
-    scene file), the whole scene directory (scripts next to the scene), the renderer-side
-    runtime, the renderer version, and the reduced-motion variant."""
+    """Identity of a shot's run directory: everything that can change its pixels (the plan's
+    shot key, the scene directory, the renderer-side runtime and version, the reduced-motion
+    variant) plus what its stored QA was judged against (shot id and checkpoints), so editing
+    a checkpoint re-checks instead of reusing a stale verdict."""
     return canonical.sha256_json(
         {
             "contract": CONTRACT_VERSION,
+            "shot_id": shot.id,
+            "checkpoints": [c.model_dump(mode="json") for c in shot.checkpoints],
             "plan_key": plan_shot.cache_key,
             "scene_tree": _scene_tree_sha(loaded, shot),
             "runtime": adapter.runtime_sha256(),
