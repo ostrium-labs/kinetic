@@ -14,15 +14,16 @@ from ostrium_kinetic.adapters.godot import (
     ERROR_FILE,
     RUNTIME_DIR,
     GodotAdapter,
+    ProcessResult,
     build_project,
     check_output,
     godot_command,
     render_timeout,
+    run_logged,
     runtime_sha256,
     set_project_settings,
     window_size,
 )
-from ostrium_kinetic.adapters.process import ProcessResult, run_logged
 from ostrium_kinetic.job import AdapterError, ShotJob, frame_name
 
 
@@ -173,6 +174,12 @@ def test_runtime_sha256_is_stable_and_ignores_import_cache(tmp_path: Path) -> No
     (copy / ".godot").mkdir()
     (copy / ".godot" / "uid_cache.bin").write_bytes(b"cache")
     assert runtime_sha256(copy) == base
+    # tool state and stray non-Godot files never change the key
+    stray = copy / "addons" / "kinetic_runtime" / ".omc" / "state"
+    stray.mkdir(parents=True)
+    (stray / "session.json").write_text("{}", "utf-8")
+    (copy / "addons" / "kinetic_runtime" / "notes.txt").write_text("scratch", "utf-8")
+    assert runtime_sha256(copy) == base
     (copy / "addons" / "kinetic_runtime" / "kinetic.gd").write_text("changed\n", "utf-8")
     assert runtime_sha256(copy) != base
 
@@ -260,9 +267,11 @@ def test_render_rejects_mismatched_out_dir(tmp_path: Path, film_dir: Path) -> No
 
 def test_run_logged_captures_output_and_kills_on_timeout(tmp_path: Path) -> None:
     log = tmp_path / "out.log"
-    ok = run_logged([sys.executable, "-c", "print('hello'); import sys; sys.exit(3)"], log, 60)
+    code = "import sys; print('hello'); print('oops', file=sys.stderr); sys.exit(3)"
+    ok = run_logged([sys.executable, "-c", code], log, 60)
     assert ok.returncode == 3 and not ok.timed_out
-    assert "hello" in log.read_text("utf-8")
+    text = log.read_text("utf-8")
+    assert text.startswith("$ ") and "hello" in text and "oops" in text  # stdout and stderr
 
     slow = run_logged([sys.executable, "-c", "import time; time.sleep(60)"], log, 1)
     assert slow.timed_out and slow.returncode is None

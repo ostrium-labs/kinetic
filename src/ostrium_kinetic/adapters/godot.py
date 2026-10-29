@@ -9,11 +9,12 @@ Maker needs a window and a GPU context.
 from __future__ import annotations
 
 import shutil
+import subprocess
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from ostrium_kinetic import canonical
-from ostrium_kinetic.adapters.process import ProcessResult, log_tail, run_logged
+from ostrium_kinetic import canonical, proc
 from ostrium_kinetic.env.hardware import png_size
 from ostrium_kinetic.env.tools import discover, probe_version, resolve
 from ostrium_kinetic.job import (
@@ -29,12 +30,25 @@ from ostrium_kinetic.job import (
 )
 from ostrium_kinetic.workspace import Workspace
 
-RUNTIME_DIR = Path(__file__).resolve().parents[3] / "renderers" / "godot"
+
+def find_runtime_dir() -> Path:
+    """The Godot runtime project: `renderers/godot/` in a repo checkout first, then the copy
+    a wheel carries at `ostrium_kinetic/_renderers/godot/` (pyproject force-include)."""
+    here = Path(__file__).resolve()
+    checkout = here.parents[3] / "renderers" / "godot"
+    packaged = here.parents[1] / "_renderers" / "godot"
+    return next((d for d in (checkout, packaged) if (d / "project.godot").is_file()), checkout)
+
+
+RUNTIME_DIR = find_runtime_dir()
 PROJECT_DIR = "project"  # inside the run directory
 WORKSPACE_DIR = "workspace"  # inside the project: res://workspace/<scene path>
 ERROR_FILE = "runtime_error.txt"
 MOVIE_FILE = "frame.png"  # Movie Maker writes frame00000000.png, ... next to it
 IGNORED_DIRS = frozenset({".godot", "__pycache__"})
+# Only Godot sources count toward the runtime hash; editor caches, tool state and other
+# stray files (anything under a dot-directory) never change a render key.
+RUNTIME_SUFFIXES = frozenset({".gd", ".tscn", ".tres", ".godot", ".gdshader", ".cfg"})
 MAX_WINDOW = 640  # the visible window; output size comes from the viewport
 MSAA_3D = {"draft": 0, "high": 2}  # 0 off, 2 = 4x
 LOG_TAIL_LINES = 20
@@ -42,16 +56,68 @@ LOG_TAIL_LINES = 20
 SettingValue = str | int | float | bool
 
 
+@dataclass(frozen=True)
+class ProcessResult:
+    returncode: int | None  # None when the process was killed on timeout
+    seconds: float
+    timed_out: bool
+    log_path: Path
+
+    def tail(self, lines: int = 20) -> str:
+        return log_tail(self.log_path, lines)
+
+
+def log_tail(path: Path, lines: int = 20) -> str:
+    """The last `lines` non-empty lines of a log file ("" if it does not exist)."""
+    try:
+        text = path.read_text("utf-8", errors="replace")
+    except OSError:
+        return ""
+    kept = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
+    return "\n".join(kept[-lines:])
+
+
+def run_logged(
+    args: Sequence[str],
+    log_path: Path,
+    timeout: float,
+    cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> ProcessResult:
+    """Run `args` with `proc.run` (no shell, whole tree killed on timeout) and write the
+    command line, stdout and stderr to `log_path`. Never raises on a non-zero exit or a
+    timeout; raises OSError if the executable cannot be started."""
+    header = f"$ {subprocess.list2cmdline(list(args))}\n"
+    try:
+        done = proc.run(args, timeout, cwd=cwd, env=env)
+    except OSError as exc:
+        canonical.write_text_lf(log_path, f"{header}{exc}\n")
+        raise
+    parts = [header, done.stdout]
+    if done.stderr:
+        parts += ["\n--- stderr ---\n", done.stderr]
+    if done.timed_out:
+        parts.append(f"\n[kinetic] killed after timeout of {timeout:g} s\n")
+    canonical.write_text_lf(log_path, "".join(parts))
+    returncode = None if done.timed_out else done.returncode
+    return ProcessResult(returncode, done.seconds, done.timed_out, log_path)
+
+
 def _files(root: Path) -> list[Path]:
     return [
         p
         for p in root.rglob("*")
-        if p.is_file() and not IGNORED_DIRS.intersection(p.relative_to(root).parts)
+        if p.is_file()
+        and p.suffix in RUNTIME_SUFFIXES
+        and not any(
+            part in IGNORED_DIRS or part.startswith(".") for part in p.relative_to(root).parts[:-1]
+        )
     ]
 
 
 def runtime_sha256(root: Path = RUNTIME_DIR) -> str:
-    """Hash of the runtime project, ignoring Godot's .godot/ import cache."""
+    """Hash of the runtime project's Godot sources (see RUNTIME_SUFFIXES); caches, tool
+    state and files under dot-directories are ignored."""
     return canonical.sha256_tree(root, _files(root))
 
 
@@ -154,7 +220,7 @@ def build_project(job: ShotJob, run_dir: Path, runtime_dir: Path = RUNTIME_DIR) 
     project = run_dir / PROJECT_DIR
     if project.exists():
         shutil.rmtree(project)
-    ignore = shutil.ignore_patterns(*IGNORED_DIRS)
+    ignore = shutil.ignore_patterns(*IGNORED_DIRS, ".omc", ".git")
     shutil.copytree(runtime_dir, project, ignore=ignore)
     shutil.copytree(film_dir / rel, project / WORKSPACE_DIR / rel, ignore=ignore)
     config = project / "project.godot"
