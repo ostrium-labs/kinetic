@@ -34,7 +34,8 @@ def make_film(tmp_path: Path, *edits: Edit) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "kinetic.toml").write_text('[cache]\ndir = ".kcache"\n', "utf-8")
     film_dir = tmp_path / "film"
-    shutil.copytree(EXAMPLE, film_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    # Without the example's scenes: tests that need a scene write their own.
+    shutil.copytree(EXAMPLE, film_dir, ignore=shutil.ignore_patterns("__pycache__", "scenes"))
     doc = read_yaml(film_dir / "film.yaml")
     for edit in edits:
         edit(doc)
@@ -81,7 +82,9 @@ def test_cache_keys_stable(tmp_path: Path) -> None:
     film_dir = make_film(tmp_path, two_shots)
     first, second = plan(film_dir), plan(film_dir)
     assert first == second
-    assert len(set(keys(first).values())) == 2
+    # S2 renders exactly what S1 renders (same scene, trace, framing): the key is about
+    # pixels, not shot identity, so they share it.
+    assert len(set(keys(first).values())) == 1
 
 
 def test_changing_one_shot_changes_only_its_key(tmp_path: Path) -> None:
@@ -115,6 +118,86 @@ def test_scene_file_changes_key(tmp_path: Path) -> None:
     with_scene = plan(film_dir).shots[0]
     assert with_scene.scene_sha256 == canonical.sha256_file(scene)
     assert with_scene.cache_key != without.cache_key
+
+
+def test_scene_directory_helper_changes_key(tmp_path: Path) -> None:
+    film_dir = make_film(tmp_path)
+    scene = film_dir / "scenes" / "godot" / "failover.tscn"
+    scene.parent.mkdir(parents=True, exist_ok=True)
+    scene.write_text('[gd_scene format=3]\n[ext_resource path="res://failover.gd"]\n', "utf-8")
+    script = scene.parent / "failover.gd"
+    script.write_text("extends Node3D\n", "utf-8")
+    (scene.parent / "helper.gd").write_text("extends Node\n", "utf-8")
+    before = plan(film_dir).shots[0]
+    (scene.parent / "helper.gd").write_text("extends Node # different camera\n", "utf-8")
+    after = plan(film_dir).shots[0]
+    assert after.scene_sha256 == before.scene_sha256  # the .tscn itself did not change
+    assert after.cache_key != before.cache_key
+
+
+def test_style_file_contents_change_key(tmp_path: Path) -> None:
+    def with_style(doc: dict[str, Any]) -> None:
+        doc["style"] = "style.yaml"
+
+    film_dir = make_film(tmp_path, with_style)
+    style = film_dir / "style.yaml"
+    style.write_bytes(b'roles: {fault: "#f00"}\n')
+    red = keys(plan(film_dir))
+    style.write_bytes(b'roles: {fault: "#00f"}\n')
+    blue = keys(plan(film_dir))
+    assert red != blue
+    style.write_bytes(b'roles: {fault: "#f00"}\r\n')
+    assert keys(plan(film_dir)) == red  # line endings do not matter
+
+
+def test_missing_style_file_blocks_plan(tmp_path: Path) -> None:
+    def with_style(doc: dict[str, Any]) -> None:
+        doc["style"] = "style.yaml"
+
+    with pytest.raises(PlanError, match=r"style file not found: style\.yaml"):
+        plan(make_film(tmp_path, with_style))
+
+
+def test_non_render_fields_do_not_change_key(tmp_path: Path) -> None:
+    def non_render(doc: dict[str, Any]) -> None:
+        s1 = doc["sequences"][0]["shots"][0]
+        s1["intent"] = "Something else entirely."
+        s1["claims"] = []
+        s1["checkpoints"] = s1["checkpoints"][:1]
+        s1["sim"]["module"] = "./sim/../sim/failover.py"
+        doc["title"] = "Another title"
+
+    base = keys(plan(make_film(tmp_path / "a")))
+    assert keys(plan(make_film(tmp_path / "b", non_render))) == base
+
+
+def test_render_fields_change_key(tmp_path: Path) -> None:
+    def calm(doc: dict[str, Any]) -> None:
+        doc["sequences"][0]["shots"][0]["variant_calm"] = True
+
+    def camera(doc: dict[str, Any]) -> None:
+        doc["sequences"][0]["shots"][0]["framings"]["16:9"]["camera"] = "close"
+
+    def vertical_camera(doc: dict[str, Any]) -> None:
+        doc["sequences"][0]["shots"][0]["framings"]["9:16"]["camera"] = "close"
+
+    base = keys(plan(make_film(tmp_path / "a")))
+    assert keys(plan(make_film(tmp_path / "b", calm))) != base
+    assert keys(plan(make_film(tmp_path / "c", camera))) != base
+    # The 9:16 framing does not reach a 16:9 render.
+    assert keys(plan(make_film(tmp_path / "d", vertical_camera))) == base
+
+
+def test_trace_dir_is_not_part_of_the_key(tmp_path: Path) -> None:
+    """A cache outside the workspace makes trace_dir absolute; the key must not move."""
+    inside = plan(make_film(tmp_path / "a")).shots[0]
+    film_dir = make_film(tmp_path / "b")
+    outside_cache = (tmp_path / "elsewhere" / "cache").as_posix()
+    (tmp_path / "b" / "kinetic.toml").write_text(f'[cache]\ndir = "{outside_cache}"\n', "utf-8")
+    outside = plan(film_dir).shots[0]
+    assert outside.trace_dir is not None and Path(outside.trace_dir).is_absolute()
+    assert inside.trace_dir != outside.trace_dir
+    assert inside.cache_key == outside.cache_key
 
 
 def test_social_plan_includes_only_vertical_shots(tmp_path: Path) -> None:
@@ -174,3 +257,15 @@ def test_run_film_sims_errors(tmp_path: Path) -> None:
         run_film_sims(loaded, ws, shot_id="S9")
     with pytest.raises(ValueError, match="shot S1: simulation failed: KeyError"):
         run_film_sims(loaded, ws)
+
+
+def test_run_film_sims_reports_sys_exit(tmp_path: Path) -> None:
+    film_dir = make_film(tmp_path)
+    (film_dir / "sim" / "failover.py").write_text(
+        "import sys\nTICK_RATE = 1\ndef run(ctx):\n    sys.exit(2)\n", "utf-8"
+    )
+    loaded, ws = load_film(film_dir), Workspace.find(film_dir)
+    with pytest.raises(ValueError, match=r"shot S1: .*simulation called exit\(2\)"):
+        run_film_sims(loaded, ws)
+    with pytest.raises(PlanError, match=r"simulation called exit\(2\)"):
+        plan(film_dir)

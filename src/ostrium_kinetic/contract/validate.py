@@ -63,6 +63,9 @@ def _check_static(loaded: LoadedFilm) -> list[Diagnostic]:
     claims = {c.id: c for c in loaded.claims}
     narration_ids = {n.id for n in film.narration}
 
+    if film.style is not None and not (loaded.film_dir / film.style).is_file():
+        out.append(_error(f"film {film.id}", f"style file not found: {film.style}"))
+
     for claim in loaded.claims:
         if claim.source is not None and claim.source not in source_ids:
             out.append(_error(f"claim {claim.id}", f"unknown source {claim.source!r}"))

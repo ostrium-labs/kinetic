@@ -25,7 +25,8 @@ def make_film(tmp_path: Path, edit: Edit | None = None) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "kinetic.toml").write_text('[cache]\ndir = ".kcache"\n', "utf-8")
     film_dir = tmp_path / "film"
-    shutil.copytree(EXAMPLE, film_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    # Without the example's scenes: tests that need a scene write their own.
+    shutil.copytree(EXAMPLE, film_dir, ignore=shutil.ignore_patterns("__pycache__", "scenes"))
     if edit is not None:
         doc = read_yaml(film_dir / "film.yaml")
         edit(doc)
@@ -57,6 +58,30 @@ def test_example_is_valid(tmp_path: Path) -> None:
     assert errors(diags) == []
     assert warnings(diags) == ["shot S1: scene file not found: scenes/godot/failover.tscn"]
     assert (tmp_path / ".kcache" / "traces").is_dir()
+
+
+def test_missing_style_file_is_an_error(tmp_path: Path) -> None:
+    def with_style(doc: dict[str, Any]) -> None:
+        doc["style"] = "style.yaml"
+
+    assert errors(run(tmp_path / "a", with_style, run_sims=False)) == [
+        "film kinetic.smoke-failover: style file not found: style.yaml"
+    ]
+    film_dir = make_film(tmp_path / "b", with_style)
+    (film_dir / "style.yaml").write_text("roles: {}\n", "utf-8")
+    diags = validate_film(load_film(film_dir), Workspace.find(film_dir), run_sims=False)
+    assert errors(diags) == []
+
+
+def test_sim_calling_exit_is_reported(tmp_path: Path) -> None:
+    film_dir = make_film(tmp_path)
+    (film_dir / "sim" / "failover.py").write_text(
+        "import sys\nTICK_RATE = 1\ndef run(ctx):\n    sys.exit(0)\n", "utf-8"
+    )
+    diags = validate_film(load_film(film_dir), Workspace.find(film_dir))
+    assert errors(diags) == [
+        "shot S1: simulation broke the trace contract: simulation called exit(0)"
+    ]
 
 
 def test_scene_present_no_warning(tmp_path: Path) -> None:

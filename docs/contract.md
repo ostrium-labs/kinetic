@@ -74,6 +74,9 @@ Unknown keys are errors everywhere (`extra = forbid`).
   numbers of the simulation's ticks.
 - If the timemap speed is not 1 (sim seconds / film seconds), `label` must be non-empty.
 - The sim module must exist; a missing scene file is a warning in M1.
+- When `style` is set, the style file must exist.
+- A simulation that calls `sys.exit()` (or raises another non-`Exception` error) fails its
+  shot like any other simulation error.
 - Checkpoints must lie inside the shot (`at_frame < frames`) and must hold against the trace.
 
 ### Timemap
@@ -100,7 +103,10 @@ Booleans only match booleans. An absent entity, field or span never matches.
 
 `kinetic sim` writes three files to `.kinetic/traces/<key[:16]>/`. The key is the sha256 of
 the canonical JSON of the contract version, the kinetic version, the simulation source hash
-(every `.py` file under the module's directory, line endings normalised), params and seed.
+(every `.py` file under the module's directory, line endings normalised, ordered by relative
+POSIX path as a plain string), the entry module's file name, params and seed. A cache hit is
+used only when its `trace.meta.json` records the same module file name, source hash, params
+and seed; otherwise it is rebuilt.
 
 ### trace.jsonl
 
@@ -185,8 +191,22 @@ must match.
 | `event_count`, `span_count` | line counts of the two JSONL files |
 | `files` | `{"trace.jsonl": sha256, "spans.jsonl": sha256}` |
 
-`Trace.load` re-hashes both JSONL files and refuses a trace whose hashes do not match; the
-cache then rebuilds the entry.
+`trace.meta.sha256` (the sha256 of `trace.meta.json`, one line) is required next to it.
+`Trace.load` checks it, requires `files` to list exactly the two JSONL files, re-hashes both
+and refuses a trace that fails any check; the cache then rebuilds the entry (as it does for
+any error reading a cached entry).
+
+### Render-plan cache keys
+
+A shot's `cache_key` hashes only what reaches the renderer: renderer, evidence, scene path,
+frames, timemap, the framing for the profile's aspect, `variant_calm`, film fps, the profile
+(name, size, quality), the trace sha256, the scene file's sha256, the hash of the scene's
+directory tree (only the scene file when it sits directly in the film directory), the style
+file's sha256 when `style` is set, and the contract and kinetic versions. Intent, claims,
+checkpoints, narration, the spelling of `sim.module` and the shot's position in the cut do
+not change it, so two shots with identical render inputs share a key. `trace_dir` is never
+part of a key; it is relative to the workspace root, or absolute (machine-specific) when the
+cache lives outside the workspace.
 
 ## Determinism
 
@@ -199,7 +219,8 @@ on every platform. This is enforced by:
   with integer draws (`int_between`) for jitter;
 - canonical JSON with LF line endings.
 
-The golden hash of the smoke-failover trace (seed 7) is in
-`tests/golden/smoke-failover.trace.sha256` and is checked on Windows and Ubuntu CI. Plans and
+The golden hashes of the smoke-failover trace and spans (seed 7) are in
+`tests/golden/smoke-failover.trace.sha256` and `tests/golden/smoke-failover.spans.sha256` and
+are checked on Windows and Ubuntu CI. Plans and
 annotations are byte-identical too. Rendered pixels are only perceptually identical, and
 pixel goldens are compared on the same machine class only.
