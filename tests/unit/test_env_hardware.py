@@ -197,3 +197,14 @@ def parse_encoders_for(ffmpeg: str) -> set[str]:
     from ostrium_kinetic.env.probes import list_encoders
 
     return list_encoders(ffmpeg)[0]
+
+
+def test_godot_probe_project_uses_a_fixed_user_dir(tmp_path: Path) -> None:
+    """Without a custom user dir every probe run would leave a new app_userdata folder."""
+    from ostrium_kinetic.env.probes import write_godot_probe
+
+    write_godot_probe(tmp_path / "p")
+    text = (tmp_path / "p" / "project.godot").read_text("utf-8")
+    application = text.split("[application]", 1)[1].split("\n[", 1)[0]
+    assert "config/use_custom_user_dir=true" in application
+    assert 'config/custom_user_dir_name="kinetic"' in application
