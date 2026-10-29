@@ -68,6 +68,7 @@ after the mezzanine unless `--keep-frames` is given.
 | `annotations.layout.safe_area` | 9:16 only: a label's rect enters the top 14% or bottom 20% of the frame (fail) |
 | `annotations.layout.label_size` | a label's rect is less than 28 px high per 1080 px of frame height (warn) |
 | `annotations.layout.clutter` | more than 4 labels on a frame (warn) |
+| `annotations.layout.occlusion` | a label covers more than 10% of a compact tracked entity's box (warn). Entities whose box is over 4x the label's area (long or curved links) are skipped, since a bbox overstates their pixels |
 
 `kinetic validate` evaluates the same checkpoints on the trace alone. A checkpoint that passes
 `validate` and fails QA means the renderer's testimony disagrees with the trace; one that fails
@@ -157,3 +158,12 @@ What Kinetic guarantees, and what it does not:
 
 Cross-machine comparison therefore uses traces and annotations, never pixels. A changed trace
 hash for the smoke test is a contract change, not a test update.
+
+## When checks run
+
+Frame and mezzanine checks run once, when a shot renders: they judge pixels, and pixels only
+change when the render key changes. Annotation checks (`annotations.*`) are re-evaluated on
+every `render`, `assemble`, `qa` and `build` from the kept `annotations.jsonl`, against the
+film's current checkpoints and the current QA rules. Editing a checkpoint or adding a QA rule
+therefore never forces a re-render. Only frame failures stop a shot's mezzanine from being
+encoded; an annotation failure keeps the mezzanine but still blocks assembly.
