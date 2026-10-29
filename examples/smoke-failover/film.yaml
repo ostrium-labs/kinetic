@@ -1,0 +1,55 @@
+# Smoke test for the whole pipeline: one simulated shot of a link failover.
+kinetic: "0.1"
+id: kinetic.smoke-failover
+title: "Failover in three and a half seconds"
+fps: 30
+
+assumptions:
+  - id: A1
+    text: "Latencies, timeout and reroute delay are illustrative values chosen for legibility, not measurements of any network."
+
+claims:
+  - id: C1
+    text: "When the primary link fails mid-transfer, the sender's timeout triggers a resend over the secondary link."
+    evidence: simulated
+
+sequences:
+  - id: Q1
+    title: "Failover"
+    shots:
+      - id: S1
+        intent: "A packet is lost when the primary link is cut; the timeout fires and the resend crosses the secondary link and is acknowledged."
+        renderer: godot
+        scene: scenes/godot/failover.tscn
+        evidence: simulated
+        claims: [C1]
+        frames: 105
+        sim:
+          module: sim/failover.py
+          params:
+            latency_p_s: "1.5"
+            latency_s_s: "1.2"
+            ack_latency_s: "0.6"
+            cut_p_at_s: "1.2"
+            timeout_s: "1.5"
+            reroute_delay_s: "0.1"
+            jitter_ms: 20
+            end_s: "3.5"
+          seed: 7
+        timemap: { sim_start_s: 0, sim_end_s: 3.5 }
+        framings:
+          "16:9": { camera: wide }
+          "9:16": { camera: tall }
+        checkpoints:
+          - at_frame: 30
+            expect:
+              - { entity: "packet:1", field: active_span.via, equals: "link:P" }
+          - at_frame: 40
+            expect:
+              - { entity: "link:P", field: status, equals: failed }
+          - at_frame: 60
+            expect:
+              - { entity: "packet:2", field: active_span.via, equals: "link:S" }
+          - at_frame: 90
+            expect:
+              - { entity: "packet:2", field: status, equals: delivered }
