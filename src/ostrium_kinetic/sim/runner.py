@@ -17,7 +17,14 @@ from ostrium_kinetic import __version__, canonical
 from ostrium_kinetic.canonical import to_fraction
 from ostrium_kinetic.sim.model import SimSource, TraceMeta
 from ostrium_kinetic.sim.rng import RngStreams
-from ostrium_kinetic.sim.trace import META_FILE, SPANS_FILE, TRACE_FILE, Trace, encode_jsonl
+from ostrium_kinetic.sim.trace import (
+    META_FILE,
+    META_SHA_FILE,
+    SPANS_FILE,
+    TRACE_FILE,
+    Trace,
+    encode_jsonl,
+)
 from ostrium_kinetic.sim.world import SimContext, SimulationError, World
 
 
@@ -135,8 +142,10 @@ def ensure_trace(
     try:
         (tmp / TRACE_FILE).write_bytes(bundle.trace_bytes)
         (tmp / SPANS_FILE).write_bytes(bundle.spans_bytes)
+        meta_text = canonical.dumps(bundle.meta.model_dump(mode="json")) + "\n"
+        canonical.write_text_lf(tmp / META_FILE, meta_text)
         canonical.write_text_lf(
-            tmp / META_FILE, canonical.dumps(bundle.meta.model_dump(mode="json")) + "\n"
+            tmp / META_SHA_FILE, canonical.sha256_bytes(meta_text.encode("utf-8")) + "\n"
         )
         if directory.exists():
             shutil.rmtree(directory)

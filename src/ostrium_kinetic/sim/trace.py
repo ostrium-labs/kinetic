@@ -18,6 +18,7 @@ from ostrium_kinetic.sim.model import EventType, Span, TraceEvent, TraceMeta
 TRACE_FILE = "trace.jsonl"
 SPANS_FILE = "spans.jsonl"
 META_FILE = "trace.meta.json"
+META_SHA_FILE = "trace.meta.sha256"  # sidecar: the meta cannot contain its own hash
 
 
 @dataclass(frozen=True)
@@ -49,13 +50,23 @@ class Trace:
 
     @classmethod
     def load(cls, directory: Path) -> Trace:
-        meta = TraceMeta.model_validate_json((directory / META_FILE).read_text("utf-8"))
+        meta_bytes = (directory / META_FILE).read_bytes()
+        sidecar = directory / META_SHA_FILE
+        if sidecar.exists() and sidecar.read_text("utf-8").strip() != canonical.sha256_bytes(
+            meta_bytes
+        ):
+            raise ValueError(f"{directory / META_FILE}: sha256 mismatch (trace meta was modified)")
+        meta = TraceMeta.model_validate_json(meta_bytes)
         events = [TraceEvent.model_validate_json(line) for line in _lines(directory / TRACE_FILE)]
         spans = [Span.model_validate_json(line) for line in _lines(directory / SPANS_FILE)]
         for name, expected in meta.files.items():
             actual = canonical.sha256_bytes((directory / name).read_bytes())
             if actual != expected:
                 raise ValueError(f"{directory / name}: sha256 mismatch (trace was modified)")
+        if len(events) != meta.event_count or len(spans) != meta.span_count:
+            raise ValueError(f"{directory}: event/span counts disagree with {META_FILE}")
+        if events and events[-1].tick > meta.end_tick:
+            raise ValueError(f"{directory}: events run past end_tick in {META_FILE}")
         return cls(events, spans, meta)
 
     def seconds(self, tick: int) -> Fraction:

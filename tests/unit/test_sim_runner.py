@@ -241,3 +241,18 @@ def test_ensure_trace_leaves_no_temp_dirs(sim: Path, cache: Path) -> None:
     ensure_trace(sim, PARAMS, 1, cache, force=True)
     leftovers = [p.name for p in (cache / "traces").iterdir() if p.name.startswith(".tmp-")]
     assert leftovers == []
+
+
+def test_tampered_meta_is_detected_and_rebuilt(sim: Path, tmp_path: Path) -> None:
+    from ostrium_kinetic.sim.trace import META_FILE
+
+    cache = tmp_path / "cache"
+    first = ensure_trace(sim, PARAMS, seed=3, cache_root=cache)
+    meta = first.directory / META_FILE
+    text = meta.read_text("utf-8")
+    meta.write_text(text.replace('"seed":3', '"seed":4'), "utf-8", newline="\n")
+    with pytest.raises(ValueError, match="meta was modified"):
+        Trace.load(first.directory)
+    again = ensure_trace(sim, PARAMS, seed=3, cache_root=cache)
+    assert again.cached is False
+    Trace.load(again.directory)
