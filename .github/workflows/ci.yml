@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Install (locked)
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Format
+        run: uv run ruff format --check
+
+      - name: Type check
+        run: uv run pyright
+
+      - name: Schema drift
+        run: uv run kinetic schema --check
+
+      - name: Unit tests
+        run: uv run pytest -m "not renderer"
+
+      - name: Validate smoke film
+        run: uv run kinetic validate examples/smoke-failover
