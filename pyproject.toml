@@ -37,6 +37,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ostrium_kinetic"]
 
+[tool.hatch.build.targets.wheel.force-include]
+# The Godot runtime project; adapters/godot.py looks for it here when not in a repo checkout.
+"renderers/godot" = "ostrium_kinetic/_renderers/godot"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
