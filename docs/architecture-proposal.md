@@ -406,7 +406,7 @@ Run from a **fresh terminal** after `uv tool update-shell`. Every check reports 
 
 | # | Check | Method | Today's expected result |
 |---|---|---|---|
-| 1 | Executable resolution | For each tool, search in order: `kinetic.toml [tools]` → env `KINETIC_<TOOL>` → PATH → known locations (`WinGet\Packages\*`, `Program Files\Blender Foundation\Blender *`, `%LOCALAPPDATA%\Programs\Kdenlive\bin`). Report **all** candidates, not just the first. | Godot/Blender/Kdenlive found off-PATH → WARN with suggested `kinetic.toml` entries |
+| 1 | Executable resolution | For each tool, search in order: env `KINETIC_<TOOL>` → `kinetic.toml [tools]` → PATH → known locations (`WinGet\Packages\*`, `Program Files\Blender Foundation\Blender *`, `%LOCALAPPDATA%\Programs\Kdenlive\bin`). Report **all** candidates, not just the first. | Godot/Blender/Kdenlive found off-PATH → WARN with suggested `kinetic.toml` entries |
 | 2 | Shadowing | Report when the first PATH hit ≠ newest version | **uv: 0.11.31 shadows 0.13.6 → WARN** |
 | 3 | Versions | `--version` parsing; compare against `[compat]` ranges (Godot 4.7.x, Blender 5.2.x, FFmpeg ≥ 7, Manim 0.22.x, Python 3.12) | PASS |
 | 4 | Python env | `uv run python -c "import manim, cairo, manimpango"`; venv interpreter = uv-managed 3.12.13 | expected PASS after `uv sync` |

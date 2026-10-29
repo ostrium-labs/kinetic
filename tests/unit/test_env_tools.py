@@ -125,11 +125,11 @@ def test_discovery_order_and_all_path_hits(tmp_path: Path) -> None:
         known_globs=[str(tmp_path / "winget" / "astral-sh.uv_*" / f"uv{EXT}")],
         probe=False,
     )
-    assert [c.source for c in found] == ["config", "env", "path", "path", "known"]
-    for cand, want in zip(found, [pinned, envd, a, b, known], strict=True):
+    assert [c.source for c in found] == ["env", "config", "path", "path", "known"]
+    for cand, want in zip(found, [envd, pinned, a, b, known], strict=True):
         assert _same(cand.path, want)
     first = resolve(found)
-    assert first is not None and first.source == "config"
+    assert first is not None and first.source == "env"
 
 
 def test_discovery_dedupes_by_resolved_path(tmp_path: Path) -> None:

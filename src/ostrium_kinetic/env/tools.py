@@ -353,15 +353,16 @@ def discover(
         config = ws.tools if ws is not None else {}
     raw: list[tuple[str, Source]] = []
 
+    # A KINETIC_<TOOL> environment variable overrides kinetic.toml, which overrides PATH.
+    env_value = _env_get(env, f"KINETIC_{tool.upper()}", platform)
+    if env_value:
+        raw.append((str(Path(env_value).expanduser()), "env"))
     configured = config.get(tool)
     if configured:
         p = Path(configured).expanduser()
         if not p.is_absolute() and ws is not None:
             p = ws.root / p
         raw.append((str(p), "config"))
-    env_value = _env_get(env, f"KINETIC_{tool.upper()}", platform)
-    if env_value:
-        raw.append((str(Path(env_value).expanduser()), "env"))
     dirs = path_dirs if path_dirs is not None else path_dirs_from_env(env, platform)
     raw.extend((hit, "path") for hit in path_hits(tool, dirs, pathext(env, platform), platform))
     globs = known_globs if known_globs is not None else default_known_globs(tool, env, platform)
