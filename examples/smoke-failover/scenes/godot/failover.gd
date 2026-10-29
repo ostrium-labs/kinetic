@@ -76,12 +76,19 @@ func _update() -> void:
 	for id: String in _pulses:
 		var pulse: MeshInstance3D = _pulses[id]
 		var span := Kinetic.active_span(id)
+		var docked := false
+		if span.is_empty() and str(Kinetic.state(id).get("status", "")) == "delivered":
+			# A delivered packet stays shown, docked at its destination end of the link,
+			# so the "delivered" state is visible rather than implied by absence.
+			span = Kinetic.last_span(id)
+			docked = true
 		var via := str(span.get("via", ""))
 		if span.is_empty() or not _links.has(via):
 			pulse.visible = false
 			continue
 		var link: Dictionary = _links[via]
 		var u := float(span["progress"])
+		pulse.scale = Vector3.ONE * (0.6 if docked else 1.0)
 		if str(span.get("from", "")) == link["to"]:
 			u = 1.0 - u  # travelling against the curve's direction (B -> A)
 		var curve: Curve3D = link["curve"]
