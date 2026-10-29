@@ -152,6 +152,8 @@ config_version=5
 [application]
 config/name="kinetic-doctor-probe"
 run/main_scene="res://main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="kinetic"
 
 [display]
 window/size/viewport_width=320

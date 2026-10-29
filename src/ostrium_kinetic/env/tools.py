@@ -11,7 +11,6 @@ import fnmatch
 import glob
 import os
 import re
-import subprocess
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +18,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from ostrium_kinetic import proc
 from ostrium_kinetic.workspace import Workspace
 
 Source = Literal["config", "env", "path", "known"]
@@ -61,27 +61,17 @@ Runner = Callable[[Sequence[str], float], RunResult]
 
 
 def run(args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:
-    """Run a command (list args, no shell) and capture text output; never raises."""
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    """Run a command (list args, no shell) and capture text output; never raises.
+    On timeout the whole process tree is killed (see `ostrium_kinetic.proc`)."""
     try:
-        proc = subprocess.run(
-            list(args),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            stdin=subprocess.DEVNULL,
-            cwd=cwd,
-            creationflags=flags,
-        )
-    except subprocess.TimeoutExpired as exc:
-        out = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else ""
-        err = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else ""
-        return RunResult(-1, out, err + f"\ntimed out after {timeout:g} s", timed_out=True)
-    except OSError as exc:
+        done = proc.run(args, timeout, cwd=cwd)
+    except (OSError, ValueError) as exc:
         return RunResult(-1, "", f"{type(exc).__name__}: {exc}")
-    return RunResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+    if done.timed_out:
+        return RunResult(
+            -1, done.stdout, done.stderr + f"\ntimed out after {timeout:g} s", timed_out=True
+        )
+    return RunResult(done.returncode, done.stdout, done.stderr)
 
 
 @dataclass(frozen=True)
