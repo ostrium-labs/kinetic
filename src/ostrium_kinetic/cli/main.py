@@ -8,12 +8,16 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 from ostrium_kinetic import __version__, log
 from ostrium_kinetic.workspace import Workspace
+
+if TYPE_CHECKING:
+    from ostrium_kinetic.contract.loader import LoadedFilm
+    from ostrium_kinetic.pipeline import RenderOutcome
 
 app = typer.Typer(
     name="kinetic",
@@ -160,7 +164,7 @@ ProfileOpt = Annotated[
 ]
 
 
-def _load(film: Path, profile: str) -> tuple[Workspace, object]:
+def _load(film: Path, profile: str) -> tuple[Workspace, LoadedFilm]:
     from ostrium_kinetic.contract.loader import FilmLoadError, load_film
 
     _check_profile(profile)
@@ -179,8 +183,8 @@ def _pipeline_errors() -> tuple[type[Exception], ...]:
     return (PipelineError, PlanError, MediaError)
 
 
-def _print_shots(outcome: object) -> None:
-    for s in outcome.shots:  # type: ignore[attr-defined]
+def _print_shots(outcome: RenderOutcome) -> None:
+    for s in outcome.shots:
         state = "cached" if s.cached else s.result.status
         fails = [c for c in s.checks if c.status == "fail"]
         line = f"{s.plan_shot.shot_id}: {state}  {s.run_dir}"
@@ -209,7 +213,7 @@ def render(
     ws, loaded = _load(film, profile)
     try:
         outcome = render_film(
-            loaded,  # type: ignore[arg-type]
+            loaded,
             ws,
             profile,
             shot_id=shot,
@@ -236,7 +240,7 @@ def _assemble_and_qa(film: Path, profile: str, *, render_first: bool, calm: bool
     ws, loaded = _load(film, profile)
     try:
         outcome = render_film(
-            loaded,  # type: ignore[arg-type]
+            loaded,
             ws,
             profile,
             calm=calm,
@@ -295,7 +299,7 @@ def qa(
             ws,
             profile,
             calm=calm,
-            collect_only=True,  # type: ignore[arg-type]
+            collect_only=True,
         )
         report = qa_film(outcome, None, ws)
     except _pipeline_errors() as exc:
