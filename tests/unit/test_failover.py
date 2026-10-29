@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 from ostrium_kinetic.canonical import sha256_bytes
 from ostrium_kinetic.sim import Outcome, Trace
 from ostrium_kinetic.sim.runner import TraceBundle, ensure_trace, run_simulation
-from ostrium_kinetic.sim.trace import TRACE_FILE
+from ostrium_kinetic.sim.trace import SPANS_FILE, TRACE_FILE
 from ostrium_kinetic.timeline import ShotClock
 
 SEED = 7
@@ -123,6 +123,11 @@ def test_trace_matches_golden_sha(bundle: TraceBundle, golden_dir: Path) -> None
     assert sha256_bytes(bundle.trace_bytes) == bundle.trace_sha256 == golden
 
 
+def test_spans_match_golden_sha(bundle: TraceBundle, golden_dir: Path) -> None:
+    golden = (golden_dir / "smoke-failover.spans.sha256").read_text("utf-8").strip()
+    assert sha256_bytes(bundle.spans_bytes) == bundle.meta.files[SPANS_FILE] == golden
+
+
 def test_rerun_is_byte_identical(
     bundle: TraceBundle, failover_module: Path, failover_params: dict[str, Any]
 ) -> None:
@@ -137,6 +142,8 @@ def test_cached_trace_on_disk_matches_golden(
     ref = ensure_trace(failover_module, failover_params, SEED, tmp_path / "cache")
     golden = (golden_dir / "smoke-failover.trace.sha256").read_text("utf-8").strip()
     assert sha256_bytes((ref.directory / TRACE_FILE).read_bytes()) == golden
+    golden_spans = (golden_dir / "smoke-failover.spans.sha256").read_text("utf-8").strip()
+    assert sha256_bytes((ref.directory / SPANS_FILE).read_bytes()) == golden_spans
     assert Trace.load(ref.directory).meta.seed == SEED
 
 
