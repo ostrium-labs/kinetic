@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="lookdev.gd" id="1_lookdev"]
+
+[node name="Lookdev" type="Node3D"]
+script = ExtResource("1_lookdev")
+
+[node name="hero" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.995, 0.1, 0, -0.1, 0.995, 0, 2.1, 12)
+fov = 36.0
+near = 0.1
+far = 200.0
+
+[node name="tall" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 5, 14)
+keep_aspect = 0
+fov = 62.0
+near = 0.1
+far = 200.0

@@ -1,0 +1,66 @@
+# Look-development film for Gate B (M2): the smoke-failover mechanism given a finished
+# visual treatment. Same simulation, params and seed as examples/smoke-failover; the trace is
+# slowed so the 3.5 s of simulated time plays over 12 s. Rationale: LOOKDEV.md.
+kinetic: "0.1"
+id: kinetic.lookdev-failover
+title: "Failover, slowed down"
+fps: 30
+
+assumptions:
+  - id: A1
+    text: "This is a simplified model of a link failover, not a model of any real network or protocol."
+  - id: A2
+    text: "Latencies, timeout and reroute delay are illustrative values chosen for legibility, not measurements of any network."
+
+claims:
+  - id: C1
+    text: "When the primary link fails mid-transfer, the sender's timeout triggers a resend over the secondary link."
+    evidence: simulated
+
+sequences:
+  - id: Q1
+    title: "Failover"
+    shots:
+      - id: L1
+        intent: "A packet is lost when the primary link is cut; the sender's timeout fires, the route moves to the secondary link, and the resend is delivered and acknowledged."
+        renderer: godot
+        scene: scenes/godot/lookdev.tscn
+        evidence: simulated
+        claims: [C1]
+        frames: 360
+        sim:
+          module: sim/failover.py
+          params:
+            latency_p_s: "1.5"
+            latency_s_s: "1.2"
+            ack_latency_s: "0.6"
+            cut_p_at_s: "1.2"
+            timeout_s: "1.5"
+            reroute_delay_s: "0.1"
+            jitter_ms: 20
+            end_s: "3.5"
+          seed: 7
+        # 3.5 s of sim over 12 s of film: speed 7/24, i.e. slowed 24/7 = 3.43x.
+        timemap: { sim_start_s: 0, sim_end_s: 3.5, label: "time slowed 3.4×" }
+        framings:
+          "16:9": { camera: hero }
+          "9:16": { camera: tall }
+        # frame f shows tick (3500 * f) // 360
+        checkpoints:
+          - at_frame: 62      # tick 602: packet 1 mid-flight on the primary
+            expect:
+              - { entity: "packet:1", field: active_span.via, equals: "link:P" }
+              - { entity: "link:P", field: status, equals: up }
+          - at_frame: 128     # tick 1244: primary cut at 1200, packet 1 lost, timeout not yet fired
+            expect:
+              - { entity: "link:P", field: status, equals: failed }
+              - { entity: "packet:1", field: status, equals: lost }
+              - { entity: "link:S", field: status, equals: standby }
+          - at_frame: 226     # tick 2197: resend in flight on the secondary
+            expect:
+              - { entity: "packet:2", field: active_span.via, equals: "link:S" }
+              - { entity: "link:P", field: status, equals: down }
+          - at_frame: 308     # tick 2994: packet 2 delivered, ack in flight back to A
+            expect:
+              - { entity: "packet:2", field: status, equals: delivered }
+              - { entity: "packet:ack2", field: active_span.via, equals: "link:S" }
