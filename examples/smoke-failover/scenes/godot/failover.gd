@@ -170,6 +170,10 @@ func _add_badges() -> void:
 	badge.add_theme_font_size_override("font_size", maxi(10, int(size.y * 0.03)))
 	badge.add_theme_color_override("font_color", Color(0.75, 0.8, 0.88))
 	badge.position = size * 0.05
+	if size.y > size.x:
+		# 9:16: platform UI covers the top 14% and bottom 20%; sit just below the top band.
+		# Right half: node A and the start of link S occupy the left side at this height.
+		badge.position = Vector2(size.x * 0.62, size.y * 0.16)
 	layer.add_child(badge)
 	Kinetic.label(badge.text, badge)
 
