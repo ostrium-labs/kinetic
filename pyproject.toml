@@ -20,7 +20,7 @@ dependencies = [
 manim = ["manim==0.22.1"]
 
 [project.scripts]
-kinetic = "ostrium_kinetic.cli.main:app"
+kinetic = "ostrium_kinetic.cli.main:main"
 
 [dependency-groups]
 dev = [
