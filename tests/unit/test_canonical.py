@@ -153,3 +153,10 @@ def test_write_text_lf_writes_lf_only(tmp_path: Path) -> None:
     path = tmp_path / "sub" / "out.json"
     canonical.write_text_lf(path, "a\nb\n")
     assert path.read_bytes() == b"a\nb\n"
+
+
+def test_dumps_rejects_nan_and_infinity() -> None:
+    with pytest.raises(ValueError):
+        canonical.dumps({"x": float("nan")})
+    with pytest.raises(ValueError):
+        canonical.dumps([float("inf")])

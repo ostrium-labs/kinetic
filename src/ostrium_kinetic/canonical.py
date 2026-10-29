@@ -65,9 +65,16 @@ def _default(value: Any) -> Any:
 
 
 def dumps(value: Any) -> str:
-    """Canonical JSON: sorted keys, no whitespace, UTF-8, Fractions as strings."""
+    """Canonical JSON: sorted keys, no whitespace, UTF-8, Fractions as strings.
+
+    NaN and infinity are rejected: they are not JSON and would make hashes ambiguous."""
     return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_default
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+        default=_default,
     )
 
 
