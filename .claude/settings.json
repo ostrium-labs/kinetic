@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run kinetic:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run pyright:*)",
+      "Bash(ffprobe:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)"
+    ]
+  }
+}
