@@ -108,7 +108,9 @@ def _lines(path: Path) -> Iterator[str]:
 
 
 def encode_jsonl(records: list[Any]) -> bytes:
-    return "".join(canonical.dumps(r.model_dump(mode="json", exclude_none=True)) + "\n" for r in records).encode("utf-8")
+    return "".join(
+        canonical.dumps(r.model_dump(mode="json", exclude_none=True)) + "\n" for r in records
+    ).encode("utf-8")
 
 
 def read_meta_dict(directory: Path) -> dict[str, Any]:

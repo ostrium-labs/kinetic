@@ -21,7 +21,9 @@ app = typer.Typer(
     add_completion=False,
 )
 
-FilmArg = Annotated[Path, typer.Argument(help="Film directory (containing film.yaml) or a film YAML file.")]
+FilmArg = Annotated[
+    Path, typer.Argument(help="Film directory (containing film.yaml) or a film YAML file.")
+]
 
 
 def _workspace(start: Path | None = None) -> Workspace:
@@ -47,7 +49,9 @@ def _root(
 @app.command()
 def doctor(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
-    deep: Annotated[bool, typer.Option("--deep", help="Also run small test renders and encodes.")] = False,
+    deep: Annotated[
+        bool, typer.Option("--deep", help="Also run small test renders and encodes.")
+    ] = False,
 ) -> None:
     """Check tools, versions, PATH shadowing, GPU, encoders, CPU/RAM and disk."""
     from ostrium_kinetic.env.doctor import run_doctor
@@ -64,7 +68,9 @@ def doctor(
 @app.command()
 def validate(
     film: FilmArg,
-    no_sim: Annotated[bool, typer.Option("--no-sim", help="Skip running simulations and checkpoints.")] = False,
+    no_sim: Annotated[
+        bool, typer.Option("--no-sim", help="Skip running simulations and checkpoints.")
+    ] = False,
 ) -> None:
     """Validate a film: schema, cross-references, evidence rules, and shot checkpoints."""
     from ostrium_kinetic.contract.loader import FilmLoadError, load_film
@@ -110,7 +116,9 @@ def sim(
 @app.command()
 def plan(
     film: FilmArg,
-    profile: Annotated[str, typer.Option(help="Output profile: preview, production, social, archival.")] = "preview",
+    profile: Annotated[
+        str, typer.Option(help="Output profile: preview, production, social, archival.")
+    ] = "preview",
 ) -> None:
     """Compile render-plan.json with a content-addressed cache key per shot."""
     from ostrium_kinetic.contract.loader import FilmLoadError, load_film
@@ -133,7 +141,9 @@ def plan(
 
 @app.command()
 def schema(
-    check: Annotated[bool, typer.Option(help="Fail if committed schemas differ from the models.")] = False,
+    check: Annotated[
+        bool, typer.Option(help="Fail if committed schemas differ from the models.")
+    ] = False,
 ) -> None:
     """Regenerate (or verify) the JSON Schemas generated from the contract models."""
     from ostrium_kinetic.schema_export import SCHEMA_DIR, export_schemas

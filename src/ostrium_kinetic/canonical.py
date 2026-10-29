@@ -35,7 +35,9 @@ def to_fraction(value: Any) -> Fraction:
 
 
 def fraction_str(value: Fraction) -> str:
-    return str(value.numerator) if value.denominator == 1 else f"{value.numerator}/{value.denominator}"
+    return (
+        str(value.numerator) if value.denominator == 1 else f"{value.numerator}/{value.denominator}"
+    )
 
 
 # Pydantic type for exact rationals; serialised as "a/b" (or "a") strings.

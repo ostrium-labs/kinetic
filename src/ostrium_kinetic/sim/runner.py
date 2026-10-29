@@ -51,7 +51,9 @@ def sim_source_hash(module_path: Path) -> str:
     """Hash every .py file in the simulation's directory, so editing a helper module next
     to the simulation also invalidates its traces."""
     root = module_path.parent
-    return canonical.sha256_tree(root, [p for p in root.rglob("*.py") if "__pycache__" not in p.parts])
+    return canonical.sha256_tree(
+        root, [p for p in root.rglob("*.py") if "__pycache__" not in p.parts]
+    )
 
 
 def load_module(module_path: Path) -> ModuleType:

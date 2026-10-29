@@ -64,7 +64,9 @@ class Recorder:
                 )
         self.entity_types[name] = dict(sorted(fields.items()))
 
-    def _check_state(self, entity: str, state: Mapping[str, Scalar], etype: str | None = None) -> None:
+    def _check_state(
+        self, entity: str, state: Mapping[str, Scalar], etype: str | None = None
+    ) -> None:
         etype = etype or self._alive[entity]
         schema = self.entity_types[etype]
         for field, value in state.items():
@@ -83,7 +85,9 @@ class Recorder:
 
     def _require_alive(self, entity: str) -> None:
         if entity not in self._alive:
-            raise SimulationError(f"{entity} does not exist (or was destroyed) at tick {self._world.now}")
+            raise SimulationError(
+                f"{entity} does not exist (or was destroyed) at tick {self._world.now}"
+            )
 
     # -- entities -------------------------------------------------------------------
     def create(self, entity: str, **state: Scalar) -> None:
@@ -208,7 +212,9 @@ def _check_interp(
 ) -> list[tuple[Fraction, Fraction]] | None:
     if interp in ("step", "linear"):
         if keys is not None:
-            raise SimulationError(f"span {span_id!r}: keys are only allowed with interp 'curve:<name>'")
+            raise SimulationError(
+                f"span {span_id!r}: keys are only allowed with interp 'curve:<name>'"
+            )
         return None
     if not interp.startswith("curve:") or len(interp) == len("curve:"):
         raise SimulationError(f"span {span_id!r}: interp must be step, linear or curve:<name>")

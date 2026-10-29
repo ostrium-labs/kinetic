@@ -25,7 +25,9 @@ TICK_RATE = Fraction(1, 1000)  # 1 tick = 1 ms
 
 def run(ctx: SimContext) -> None:
     p, world, rec = ctx.params, ctx.world, ctx.rec
-    latency = world.ticks(p["latency_s"]) + ctx.rng.int_between("jitter.link", -p["jitter_ms"], p["jitter_ms"])
+    latency = world.ticks(p["latency_s"]) + ctx.rng.int_between(
+        "jitter.link", -p["jitter_ms"], p["jitter_ms"]
+    )
 
     rec.entity_type("node", role="str")
     rec.entity_type("link", status="str", latency_ms="int")

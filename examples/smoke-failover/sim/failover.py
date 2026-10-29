@@ -23,8 +23,12 @@ def run(ctx: SimContext) -> None:
     world, rec = ctx.world, ctx.rec
     ms = world.ticks  # exact seconds -> ticks
 
-    latency_p = ms(p["latency_p_s"]) + ctx.rng.int_between("jitter.P", -p["jitter_ms"], p["jitter_ms"])
-    latency_s = ms(p["latency_s_s"]) + ctx.rng.int_between("jitter.S", -p["jitter_ms"], p["jitter_ms"])
+    latency_p = ms(p["latency_p_s"]) + ctx.rng.int_between(
+        "jitter.P", -p["jitter_ms"], p["jitter_ms"]
+    )
+    latency_s = ms(p["latency_s_s"]) + ctx.rng.int_between(
+        "jitter.S", -p["jitter_ms"], p["jitter_ms"]
+    )
     cut_at = ms(p["cut_p_at_s"])
     timeout = ms(p["timeout_s"])
     reroute_delay = ms(p["reroute_delay_s"])
