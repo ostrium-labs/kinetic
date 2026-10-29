@@ -48,9 +48,10 @@ The autoload singleton `Kinetic` is processed before scene nodes (`process_prior
 | `frame: int`, `tick: int`, `sim_seconds: float` | current frame, its tick, `tick * tick_rate` |
 | `shot_progress: float` | `frame / frame_count` (for illustrative motion only) |
 | `calm: bool` | reduced-motion variant requested |
+| `evidence: String`, `time_label: String` | `job.evidence` / `job.time_label`, or `""` when absent |
 | `state(entity) -> Dictionary` | entity state at `tick`; `{}` if not alive |
 | `alive(entity) -> bool` | |
-| `active_span(entity) -> Dictionary` | `{span_id, kind, interp, outcome, begin_tick, end_tick, progress, ...attrs}`, or `{}` |
+| `active_span(entity) -> Dictionary` | `{span_id, kind, interp, outcome, begin_tick, end_tick, progress, ...attrs}`, or `{}`; span fields win over attrs of the same name |
 | `spans_active() -> Array` | all active spans, same dictionaries plus `entity` |
 | `signals_in(from_tick, to_tick) -> Array` | `signal` events with `from_tick < tick <= to_tick` |
 | `track(entity, node: Node3D)` | include the node's screen-space bbox in annotations |
@@ -64,3 +65,36 @@ scene loads `job.json` from the `--kinetic-job <path>` user argument (after `--`
 the shot scene, makes `job.camera` current, writes annotations, and quits after
 `frame_count` frames. Failures exit non-zero and write `runtime_error.txt` in the run
 directory.
+
+### Godot runtime details (M2)
+
+- **No trace:** a job without `trace_dir` runs with `tick = -1`, no state and no spans; its
+  annotations have `"tick": null`.
+- **Integers stay integers:** Godot's `JSON` parses every number as float, so the runtime reads
+  job and trace files with its own reader (`json_lite.gd`). Annotation lines are written with
+  sorted keys and full float precision.
+- **Frame order:** `Kinetic._process` (priority -1000) updates frame, tick and the sampled
+  trace; scene nodes update in their own `_process`; annotations are collected on
+  `RenderingServer.frame_pre_draw`, after all processing and before the frame is drawn and
+  written by Movie Maker. Each line therefore describes the pixels of its own frame (checked
+  in `tests/integration/test_godot_render.py` against pulse pixel centroids).
+- **Annotations:** only entities passed to `track` appear. `bbox` is the node's world AABB
+  (merged over its visible `GeometryInstance3D` descendants) projected through the current
+  camera, from the corners in front of it, clipped to the viewport and rounded to 0.01 px.
+  It is `null`, with `visible: false`, when the node is hidden, entirely behind the camera or
+  off screen. `state` is `{}` and `active_span` `null` when the entity is not alive or idle.
+  `labels` lists `[text, [x0, y0, x1, y1]]` for every registered `Control` visible in tree
+  (unclipped, so QA can check safe areas).
+- **Scenes:** the adapter copies the scene's directory (e.g. `scenes/godot/`, with everything
+  under it) to `res://workspace/<same path>`; a scene must therefore live in a subdirectory of
+  the film and refer to its own scripts by relative path (`path="failover.gd"`).
+- **Quitting and errors:** the runner quits during the process step of frame
+  `frame_count - 1`, which still draws and writes that frame, so a run without
+  `--quit-after` also yields exactly `frame_count` frames. Exit codes: 2 bad or missing job,
+  3 camera not found, 4 trace unreadable, 5 shot scene missing or not a `Node3D`; each also
+  writes `runtime_error.txt`. The adapter additionally fails a run whose log contains
+  `SCRIPT ERROR`.
+- **Parity tool:** `godot --headless --path <project> --script
+  res://addons/kinetic_runtime/tools/sample_trace.gd -- --trace <dir> --ticks 0,10,...` prints
+  `KINETIC_SAMPLE {"<tick>": {"state": ..., "spans": [...]}}` (`--headless` is fine here
+  because Movie Maker is not used).
