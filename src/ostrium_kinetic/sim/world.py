@@ -64,8 +64,8 @@ class Recorder:
                 )
         self.entity_types[name] = dict(sorted(fields.items()))
 
-    def _check_state(self, entity: str, state: Mapping[str, Scalar]) -> None:
-        etype = self._alive[entity]
+    def _check_state(self, entity: str, state: Mapping[str, Scalar], etype: str | None = None) -> None:
+        etype = etype or self._alive[entity]
         schema = self.entity_types[etype]
         for field, value in state.items():
             if field not in schema:
@@ -87,16 +87,16 @@ class Recorder:
 
     # -- entities -------------------------------------------------------------------
     def create(self, entity: str, **state: Scalar) -> None:
-        if not ENTITY_ID.match(entity):
+        if not ENTITY_ID.fullmatch(entity):
             raise SimulationError(f"bad entity id {entity!r}; expected '<type>:<name>'")
         if entity in self._ever:
             raise SimulationError(f"entity id {entity!r} reused; ids are never reused in a trace")
         etype = entity.split(":", 1)[0]
         if etype not in self.entity_types:
             raise SimulationError(f"{entity}: entity type {etype!r} not declared")
+        self._check_state(entity, state, etype)  # validate fully before registering the id
         self._alive[entity] = etype
         self._ever.add(entity)
-        self._check_state(entity, state)
         self._emit(
             type=EventType.ENTITY_CREATED, entity=entity, entity_type=etype, state=dict(state)
         )

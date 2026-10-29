@@ -397,11 +397,6 @@ def test_finish_publishes_spans_in_begin_order(world: World, rec: Recorder) -> N
 # -- known defects in src (strict xfail: these start passing once fixed) ----------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Recorder.create registers the id before validating state, so a rejected "
-    "create still burns the id",
-)
 def test_rejected_create_does_not_burn_the_id(rec: Recorder) -> None:
     with pytest.raises(SimulationError):
         rec.create("node:A", colour="red")
@@ -421,11 +416,6 @@ def test_rejected_end_keeps_span_open(rec: Recorder) -> None:
     assert rec.is_open("tx:1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="ENTITY_ID is matched with re.match and a '$' anchor, which accepts a trailing "
-    "newline; the id then fails pydantic validation instead of raising SimulationError",
-)
 def test_entity_id_with_trailing_newline_rejected_as_simulation_error(rec: Recorder) -> None:
     with pytest.raises(SimulationError, match="bad entity id"):
         rec.create("node:A\n", role="r")
