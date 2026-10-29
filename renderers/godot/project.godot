@@ -1,0 +1,31 @@
+; Kinetic Godot runtime project. The adapter copies it into each shot run directory,
+; adds the film's scenes under res://workspace/ and rewrites [display] and the
+; anti-aliasing settings in [rendering] for the job.
+
+config_version=5
+
+[application]
+
+config/name="kinetic"
+run/main_scene="res://addons/kinetic_runtime/runner.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/use_custom_user_dir=true
+config/custom_user_dir_name="kinetic"
+
+[autoload]
+
+Kinetic="*res://addons/kinetic_runtime/kinetic.gd"
+
+[debug]
+
+file_logging/enable_file_logging.pc=false
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="viewport"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
