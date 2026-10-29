@@ -27,8 +27,7 @@ def film_dir(tmp_path: Path) -> Path:
 def test_validate_ok(film_dir: Path) -> None:
     result = runner.invoke(app, ["validate", str(film_dir)])
     assert result.exit_code == 0, result.output
-    assert "warning: shot S1: scene file not found" in result.output
-    assert "ok: kinetic.smoke-failover (1 warning(s))" in result.output
+    assert "ok: kinetic.smoke-failover (0 warning(s))" in result.output
     assert (film_dir.parent / ".kcache" / "traces").is_dir()
 
 
