@@ -56,6 +56,7 @@ The autoload singleton `Kinetic` is processed before scene nodes (`process_prior
 | `track(entity, node: Node3D)` | include the node's screen-space bbox in annotations |
 | `label(text, control: Control)` | include an on-screen label's rect in annotations |
 | `style(key, default)` | style token from the job |
+| `job.evidence`, `job.time_label` | the shot's evidence class (draw its badge, `docs/evidence-policy.md`) and the time-scale label to show when sim speed is not 1; never hard-code these in a scene |
 
 A shot scene is a `.tscn` under the film's directory. Its root is a `Node3D` that must contain a
 `Camera3D` named after every camera in the shot's framings (e.g. `wide`, `tall`). The runner

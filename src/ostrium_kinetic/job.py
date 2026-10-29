@@ -57,6 +57,8 @@ class ShotJob(_Model):
     tick_rate: Exact | None = None  # seconds per tick
     tick_start: int | None = None
     tick_end: int | None = None
+    evidence: str | None = None  # the shot's evidence class; the scene shows its badge
+    time_label: str | None = None  # on-screen time-scale label when sim speed != 1
     variant_calm: bool = False  # reduced-motion variant: cuts instead of camera moves
     annotate: bool = True
     out_dir: str  # absolute run directory
