@@ -52,11 +52,16 @@ class Trace:
     def load(cls, directory: Path) -> Trace:
         meta_bytes = (directory / META_FILE).read_bytes()
         sidecar = directory / META_SHA_FILE
-        if sidecar.exists() and sidecar.read_text("utf-8").strip() != canonical.sha256_bytes(
-            meta_bytes
-        ):
+        if not sidecar.is_file():
+            raise ValueError(f"{sidecar}: missing (cannot verify {META_FILE})")
+        if sidecar.read_text("utf-8").strip() != canonical.sha256_bytes(meta_bytes):
             raise ValueError(f"{directory / META_FILE}: sha256 mismatch (trace meta was modified)")
         meta = TraceMeta.model_validate_json(meta_bytes)
+        if set(meta.files) != {TRACE_FILE, SPANS_FILE}:
+            raise ValueError(
+                f"{directory / META_FILE}: `files` must list exactly {TRACE_FILE} and "
+                f"{SPANS_FILE}, got {sorted(meta.files)}"
+            )
         events = [TraceEvent.model_validate_json(line) for line in _lines(directory / TRACE_FILE)]
         spans = [Span.model_validate_json(line) for line in _lines(directory / SPANS_FILE)]
         for name, expected in meta.files.items():

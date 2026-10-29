@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from ostrium_kinetic import __version__
+from ostrium_kinetic import __version__, canonical
 from ostrium_kinetic.canonical import sha256_bytes
-from ostrium_kinetic.sim import SimulationError, Trace
+from ostrium_kinetic.sim import SimulationError, Trace, runner
 from ostrium_kinetic.sim.runner import (
     ensure_trace,
     load_module,
@@ -16,7 +18,7 @@ from ostrium_kinetic.sim.runner import (
     sim_source_hash,
     trace_key,
 )
-from ostrium_kinetic.sim.trace import META_FILE, SPANS_FILE, TRACE_FILE
+from ostrium_kinetic.sim.trace import META_FILE, META_SHA_FILE, SPANS_FILE, TRACE_FILE
 
 _SIM = """\
 from fractions import Fraction
@@ -209,9 +211,29 @@ def test_ensure_trace_rebuilds_after_source_edit(sim: Path, cache: Path) -> None
     assert second.trace_sha256 == first.trace_sha256  # same behaviour, new key
 
 
+def _rewrite_meta(directory: Path, edit: Callable[[dict[str, Any]], None]) -> None:
+    """Edit trace.meta.json and re-seal its sidecar, as a foreign or stale writer would."""
+    meta = json.loads((directory / META_FILE).read_text("utf-8"))
+    edit(meta)
+    text = canonical.dumps(meta) + "\n"
+    (directory / META_FILE).write_text(text, "utf-8", newline="\n")
+    (directory / META_SHA_FILE).write_text(
+        sha256_bytes(text.encode("utf-8")) + "\n", "utf-8", newline="\n"
+    )
+
+
 @pytest.mark.parametrize(
     "corrupt",
-    ["tamper_trace", "delete_meta", "garbage_meta", "delete_spans", "garbage_trace"],
+    [
+        "tamper_trace",
+        "delete_meta",
+        "garbage_meta",
+        "delete_spans",
+        "garbage_trace",
+        "delete_sidecar",
+        "extra_file_in_meta",
+        "missing_file_in_meta",
+    ],
 )
 def test_ensure_trace_rebuilds_corrupt_entry(sim: Path, cache: Path, corrupt: str) -> None:
     first = ensure_trace(sim, PARAMS, 1, cache)
@@ -227,6 +249,13 @@ def test_ensure_trace_rebuilds_corrupt_entry(sim: Path, cache: Path, corrupt: st
         (d / SPANS_FILE).unlink()
     elif corrupt == "garbage_trace":
         (d / TRACE_FILE).write_bytes(b"\xff\xfe garbage\n")
+    elif corrupt == "delete_sidecar":
+        (d / META_SHA_FILE).unlink()
+    elif corrupt == "extra_file_in_meta":
+        (d / "extra.txt").write_text("x", "utf-8")
+        _rewrite_meta(d, lambda m: m["files"].update({"extra.txt": sha256_bytes(b"x")}))
+    elif corrupt == "missing_file_in_meta":
+        _rewrite_meta(d, lambda m: m["files"].pop(SPANS_FILE))
 
     rebuilt = ensure_trace(sim, PARAMS, 1, cache)
     assert not rebuilt.cached
@@ -234,6 +263,122 @@ def test_ensure_trace_rebuilds_corrupt_entry(sim: Path, cache: Path, corrupt: st
     assert rebuilt.trace_sha256 == first.trace_sha256
     Trace.load(d)  # intact again
     assert ensure_trace(sim, PARAMS, 1, cache).cached
+
+
+@pytest.mark.parametrize("corrupt", ["delete_sidecar", "extra_file_in_meta"])
+def test_trace_load_rejects_unsealed_or_foreign_meta(sim: Path, cache: Path, corrupt: str) -> None:
+    d = ensure_trace(sim, PARAMS, 1, cache).directory
+    if corrupt == "delete_sidecar":
+        (d / META_SHA_FILE).unlink()
+        match = "missing"
+    else:
+        _rewrite_meta(d, lambda m: m["files"].update({"other.jsonl": "0" * 64}))
+        match = "must list exactly"
+    with pytest.raises(ValueError, match=match):
+        Trace.load(d)
+
+
+def test_ensure_trace_rebuilds_on_any_load_error(
+    sim: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = ensure_trace(sim, PARAMS, 1, cache)
+
+    def boom(directory: Path) -> Trace:
+        raise RuntimeError("unexpected")
+
+    with monkeypatch.context() as m:
+        m.setattr(runner.Trace, "load", boom)
+        rebuilt = ensure_trace(sim, PARAMS, 1, cache)
+    assert not rebuilt.cached
+    assert rebuilt.trace_sha256 == first.trace_sha256
+    assert ensure_trace(sim, PARAMS, 1, cache).cached
+
+
+# -- sibling modules and cache-hit verification ----------------------------------------
+
+_SIBLING = """\
+from fractions import Fraction
+
+TICK_RATE = Fraction(1, 1000)
+
+
+def run(ctx):
+    ctx.rec.entity_type("node", role="str")
+    ctx.rec.create("node:A", role="{role}")
+    ctx.world.run(until=1000)
+"""
+
+
+def test_sibling_modules_do_not_collide(tmp_path: Path, cache: Path) -> None:
+    folder = tmp_path / "sims"
+    folder.mkdir()
+    a, b = folder / "a.py", folder / "b.py"
+    a.write_text(_SIBLING.format(role="from_a"), encoding="utf-8")
+    b.write_text(_SIBLING.format(role="from_b"), encoding="utf-8")
+    assert sim_source_hash(a) == sim_source_hash(b)
+    assert trace_key(a, {}, 1) != trace_key(b, {}, 1)
+
+    ref_a = ensure_trace(a, {}, 1, cache, display_path="sims/a.py")
+    ref_b = ensure_trace(b, {}, 1, cache, display_path="sims/b.py")
+    assert not ref_b.cached
+    assert ref_a.directory != ref_b.directory
+    assert Trace.load(ref_a.directory).state_at(0)["node:A"]["role"] == "from_a"
+    assert Trace.load(ref_b.directory).state_at(0)["node:A"]["role"] == "from_b"
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda m: m.update(seed=2),
+        lambda m: m["params"].update(start=11),
+        lambda m: m["sim"].update(module="sim/other.py"),
+        lambda m: m["sim"].update(source_sha256="0" * 64),
+    ],
+    ids=["seed", "params", "module", "source"],
+)
+def test_cache_hit_for_a_different_request_is_rebuilt(
+    sim: Path, cache: Path, edit: Callable[[dict[str, Any]], None]
+) -> None:
+    first = ensure_trace(sim, PARAMS, 1, cache, display_path="sim/counter.py")
+    _rewrite_meta(first.directory, edit)
+    Trace.load(first.directory)  # still a well-formed, sealed trace
+    again = ensure_trace(sim, PARAMS, 1, cache, display_path="sim/counter.py")
+    assert not again.cached
+    meta = Trace.load(again.directory).meta
+    assert (meta.seed, meta.params, meta.sim.module) == (1, PARAMS, "sim/counter.py")
+    assert ensure_trace(sim, PARAMS, 1, cache).cached
+
+
+# -- simulations that exit --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("    sys.exit(0)\n", r"simulation called exit\(0\)"),
+        ("    sys.exit('bye')\n", r"simulation called exit\('bye'\)"),
+        ("    raise GeneratorExit('gone')\n", "simulation raised GeneratorExit: gone"),
+    ],
+)
+def test_run_exit_becomes_simulation_error(tmp_path: Path, body: str, match: str) -> None:
+    path = tmp_path / "quits.py"
+    path.write_text("import sys\nTICK_RATE = 1\ndef run(ctx):\n" + body, encoding="utf-8")
+    with pytest.raises(SimulationError, match=match):
+        run_simulation(path, {}, 0)
+
+
+def test_exit_at_import_becomes_simulation_error(tmp_path: Path) -> None:
+    path = tmp_path / "quits_on_import.py"
+    path.write_text("import sys\nsys.exit(3)\n", encoding="utf-8")
+    with pytest.raises(SimulationError, match=r"simulation called exit\(3\)"):
+        load_module(path)
+
+
+def test_keyboard_interrupt_still_propagates(tmp_path: Path) -> None:
+    path = tmp_path / "ctrl_c.py"
+    path.write_text("TICK_RATE = 1\ndef run(ctx):\n    raise KeyboardInterrupt\n", "utf-8")
+    with pytest.raises(KeyboardInterrupt):
+        run_simulation(path, {}, 0)
 
 
 def test_ensure_trace_leaves_no_temp_dirs(sim: Path, cache: Path) -> None:

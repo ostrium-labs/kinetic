@@ -7,9 +7,9 @@ import os
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import ModuleType
 from typing import Any
 
@@ -56,6 +56,21 @@ def sim_source_hash(module_path: Path) -> str:
     )
 
 
+def _call_user_code(fn: Callable[[], object]) -> None:
+    """Run simulation code so that `sys.exit()` or another non-Exception BaseException
+    becomes a SimulationError instead of terminating Kinetic. Ctrl-C still propagates."""
+    try:
+        fn()
+    except KeyboardInterrupt:
+        raise
+    except Exception:
+        raise
+    except SystemExit as exc:
+        raise SimulationError(f"simulation called exit({exc.code!r})") from exc
+    except BaseException as exc:
+        raise SimulationError(f"simulation raised {type(exc).__name__}: {exc}") from exc
+
+
 def load_module(module_path: Path) -> ModuleType:
     module_path = module_path.resolve()
     if not module_path.is_file():
@@ -64,11 +79,12 @@ def load_module(module_path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot import {module_path}")
+    loader = spec.loader
     module = importlib.util.module_from_spec(spec)
     # dataclasses and typing resolve annotations through sys.modules[module.__name__].
     sys.modules[name] = module
     try:
-        spec.loader.exec_module(module)
+        _call_user_code(lambda: loader.exec_module(module))
     except BaseException:
         sys.modules.pop(name, None)
         raise
@@ -84,7 +100,7 @@ def run_simulation(
     module = load_module(module_path)
     world = World(to_fraction(module.TICK_RATE))
     ctx = SimContext(params=dict(params), rng=RngStreams(seed), world=world)
-    module.run(ctx)
+    _call_user_code(lambda: module.run(ctx))
     spans = world.rec.finish()
     trace_bytes = encode_jsonl(world.rec.events)
     spans_bytes = encode_jsonl(spans)
@@ -109,14 +125,31 @@ def run_simulation(
 
 
 def trace_key(module_path: Path, params: Mapping[str, Any], seed: int) -> str:
+    """The source hash covers every .py file in the simulation's directory, so the entry
+    module's file name is part of the key too: sibling simulations in one folder share a
+    source hash but are different simulations."""
     return canonical.sha256_json(
         {
             "contract": "0.1",
             "kinetic": __version__,
             "sim": sim_source_hash(module_path),
+            "entry": module_path.name,
             "params": dict(params),
             "seed": seed,
         }
+    )
+
+
+def _matches_request(
+    meta: TraceMeta, module_path: Path, params: Mapping[str, Any], seed: int
+) -> bool:
+    """A cache hit must be the trace of this exact request; anything else (a prefix
+    collision, a stale or foreign entry) is rebuilt."""
+    return (
+        PurePosixPath(meta.sim.module).name == module_path.name
+        and meta.sim.source_sha256 == sim_source_hash(module_path)
+        and canonical.dumps(meta.params) == canonical.dumps(dict(params))
+        and meta.seed == seed
     )
 
 
@@ -128,15 +161,17 @@ def ensure_trace(
     display_path: str | None = None,
     force: bool = False,
 ) -> TraceRef:
-    """Run the simulation unless an intact cached trace with the same key exists."""
+    """Run the simulation unless an intact cached trace for the same request exists."""
     key = trace_key(module_path, params, seed)
     directory = cache_root / "traces" / key[:16]
     if directory.exists() and not force:
         try:
             trace = Trace.load(directory)
-            return TraceRef(key, directory, trace.meta.files[TRACE_FILE], cached=True)
-        except (OSError, ValueError):
-            shutil.rmtree(directory, ignore_errors=True)  # corrupt cache entry: rebuild
+            if _matches_request(trace.meta, module_path, params, seed):
+                return TraceRef(key, directory, trace.meta.files[TRACE_FILE], cached=True)
+        except Exception:  # any failure to read a cache entry means it is broken
+            pass
+        shutil.rmtree(directory, ignore_errors=True)  # broken or foreign entry: rebuild
 
     bundle = run_simulation(module_path, params, seed, display_path)
     directory.parent.mkdir(parents=True, exist_ok=True)
