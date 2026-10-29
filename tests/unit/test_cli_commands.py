@@ -67,7 +67,7 @@ def test_sim_runs_then_caches(film_dir: Path) -> None:
 
 def test_sim_unknown_shot(film_dir: Path) -> None:
     result = runner.invoke(app, ["sim", str(film_dir), "--shot", "S9"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2  # usage error
     assert "S9" in result.output
 
 
@@ -83,7 +83,7 @@ def test_plan(film_dir: Path, profile: str, size: str) -> None:
 
 def test_plan_unknown_profile(film_dir: Path) -> None:
     result = runner.invoke(app, ["plan", str(film_dir), "--profile", "cinema"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2  # usage error
     assert "unknown profile 'cinema'" in result.output
 
 
