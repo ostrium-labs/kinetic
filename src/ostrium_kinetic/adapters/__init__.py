@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from ostrium_kinetic.adapters.godot import GodotAdapter
+from ostrium_kinetic.adapters.manim import ManimAdapter
 from ostrium_kinetic.job import AdapterError, RendererAdapter
 
-__all__ = ["AdapterError", "GodotAdapter", "RendererAdapter", "get_adapter"]
+__all__ = ["AdapterError", "GodotAdapter", "ManimAdapter", "RendererAdapter", "get_adapter"]
 
 
 def get_adapter(renderer: str) -> RendererAdapter:
     if renderer == "godot":
         return GodotAdapter()
+    if renderer == "manim":
+        return ManimAdapter()
     raise AdapterError(f"no adapter for renderer {renderer!r} yet")
