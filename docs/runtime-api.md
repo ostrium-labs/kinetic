@@ -106,3 +106,49 @@ directory.
   `KINETIC_SAMPLE {"<tick>": {"state": ..., "spans": [...], "last": {"<entity>": ...}}}`
   (`last`: the `last_span` view of every entity whose span has ended by that tick;
   `--headless` is fine here because Movie Maker is not used).
+
+## Blender runtime (`renderers/blender/kinetic_bpy/`, GPL-2.0-or-later)
+
+Blender runs in background mode: `blender -b --factory-startup --python
+<runtime>/kinetic_bpy/run.py -- --kinetic-job <run_dir>/job.json`. The runtime never imports
+`ostrium_kinetic`; it reads `job.json`, `trace.jsonl`, `spans.jsonl` and `trace.meta.json`
+with the standard library (`json` keeps integers as integers) and samples them with the same
+rules as `sim/trace.py` (state fold, active spans `begin <= t < end`, `progress`,
+`planned_progress`, `last_span`). Frame `f` maps to a tick with the integer formula above.
+
+A Blender shot scene is a Python module (path in the shot's `scene`, relative to the film
+directory, e.g. `scenes/blender/structure.py`). It defines two functions and no other
+entry point:
+
+```python
+def build(k) -> None:
+    """Called once on an empty scene: build geometry, materials, lights, world and one camera
+    object per framing camera name (e.g. "hero", "tall"). Read k.job, k.style(), and the whole
+    trace (k.trace_events, k.spans, k.signals_in(-1, k.job["tick_end"])) to plan the shot."""
+
+
+def frame(k) -> None:
+    """Called before each frame renders, with k.frame, k.tick and the sampled trace current.
+    Set object transforms, visibility and material values as a pure function of k.tick and
+    k.frame. Never keep state between calls; frames may render in any order on retry."""
+```
+
+`k` (the `Kinetic` object passed in) offers: `job` (dict), `frame`, `tick`, `sim_seconds`,
+`shot_progress`, `calm`, `evidence`, `time_label`, `style(key, default)`,
+`state(entity)`, `alive(entity)`, `active_span(entity)`, `spans_active()`,
+`last_span(entity)`, `signals_in(from_tick, to_tick)` — the same dictionaries as the Godot
+runtime — plus `track(entity, obj)` to put an object's camera-space bbox (via
+`bpy_extras.object_utils.world_to_camera_view` over its evaluated bounding box) into
+`annotations.jsonl`, and `label(text, rect)` for text drawn in the frame (rect in pixels,
+origin top-left).
+
+The runner sets the render size from the job, colour management to AgX / sRGB, PNG RGB
+8-bit output with metadata stamping off (M0: otherwise identical pixels hash differently),
+makes `job.camera` the scene camera, then for each frame: set `scene.frame_set(f)`, update
+`k`, call `frame(k)`, render a still to `frames/frame%08d.png`, append the annotation line.
+EEVEE (`BLENDER_EEVEE`) is the engine for animation; `quality` draft vs high selects sample
+counts and resolution of effects. Failures write `runtime_error.txt` and exit non-zero.
+
+Scenes may import helper modules from their own directory (the runner puts the scene's
+directory on `sys.path`) and may use only `bpy`, `bmesh`, `mathutils`, `bpy_extras` and the
+standard library.
