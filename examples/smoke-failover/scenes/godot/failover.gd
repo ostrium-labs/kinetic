@@ -87,7 +87,10 @@ func _update() -> void:
 			pulse.visible = false
 			continue
 		var link: Dictionary = _links[via]
-		var u := float(span["progress"])
+		# planned_progress, not progress: a packet whose link is cut (span lost before its
+		# planned end) stops where it was cut instead of racing to the far end. It is hidden
+		# once lost (no active span, not delivered); a delivered packet docks at 1.0.
+		var u := float(span["planned_progress"])
 		pulse.scale = Vector3.ONE * (0.6 if docked else 1.0)
 		if str(span.get("from", "")) == link["to"]:
 			u = 1.0 - u  # travelling against the curve's direction (B -> A)

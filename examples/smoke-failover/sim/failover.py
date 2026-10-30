@@ -46,7 +46,15 @@ def run(ctx: SimContext) -> None:
 
     def send(packet: str, link: str, src: str, dst: str, payload: str, latency: int) -> None:
         rec.create(packet, status="in_flight", payload=payload)
-        rec.begin(f"tx:{packet}", packet, "transit", attrs={"from": src, "to": dst, "via": link})
+        # planned_end: when the packet would arrive. If the link is cut first, the span ends
+        # early (lost) and renderers stop the packet at its planned progress, not at 1.0.
+        rec.begin(
+            f"tx:{packet}",
+            packet,
+            "transit",
+            attrs={"from": src, "to": dst, "via": link},
+            planned_end=world.now + latency,
+        )
         world.after(latency, arrive, packet, link, dst)
 
     def arrive(packet: str, link: str, dst: str) -> None:

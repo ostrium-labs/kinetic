@@ -167,6 +167,9 @@ def test_annotations_match_trace(
                 assert span["span_id"] == active.span.span_id
                 assert span["via"] == active.span.attrs["via"]
                 assert span["progress"] == pytest.approx(float(active.progress), abs=1e-9)
+                assert span["planned_progress"] == pytest.approx(
+                    float(active.planned_progress), abs=1e-9
+                )
             if entity.startswith("packet:"):
                 # A pulse is drawn while its packet is in transit, and stays docked at the
                 # destination once delivered; a lost packet is not drawn.

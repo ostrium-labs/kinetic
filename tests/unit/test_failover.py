@@ -14,7 +14,13 @@ from hypothesis import strategies as st
 from ostrium_kinetic.canonical import sha256_bytes
 from ostrium_kinetic.sim import Outcome, Trace
 from ostrium_kinetic.sim.runner import TraceBundle, ensure_trace, run_simulation
-from ostrium_kinetic.sim.trace import SPANS_FILE, TRACE_FILE
+from ostrium_kinetic.sim.trace import (
+    SPANS_FILE,
+    TRACE_FILE,
+    planned_progress,
+    span_progress,
+    stopped_progress,
+)
 from ostrium_kinetic.timeline import ShotClock
 
 SEED = 7
@@ -59,6 +65,27 @@ def test_primary_cut_at_1200_loses_packet_1(trace: Trace) -> None:
     assert trace.state_at(1199)["link:P"]["status"] == "up"
     assert trace.state_at(1200)["link:P"]["status"] == "failed"
     assert trace.state_at(1200)["packet:1"]["status"] == "lost"
+
+
+def test_lost_packet_stops_where_the_link_was_cut(trace: Trace) -> None:
+    """tx:packet:1 was planned to arrive after the P latency (1488 ticks at seed 7) but was cut
+    at 1200: drawn by planned progress, the packet stops at 1200/1488 of the way, not at 1."""
+    tx1 = _span(trace, "tx:packet:1")
+    assert tx1.planned_end_tick == 1488 == trace.state_at(0)["link:P"]["latency_ms"]
+    assert stopped_progress(tx1) == Fraction(1200, 1488)  # ~0.806
+    last = trace.last_span_of("packet:1", 3000)
+    assert last is not None and stopped_progress(last) == Fraction(1200, 1488)
+    active = trace.active_span_of("packet:1", 1199)
+    assert active is not None
+    assert active.progress == Fraction(1199, 1200)
+    assert active.planned_progress == Fraction(1199, 1488)
+    # Delivered packets ran to their planned end: planned progress equals progress.
+    for span_id in ("tx:packet:2", "tx:packet:ack2"):
+        span = _span(trace, span_id)
+        assert span.planned_end_tick == span.end_tick
+        assert stopped_progress(span) == 1
+        mid = (span.begin_tick + span.end_tick) // 2
+        assert planned_progress(span, mid) == span_progress(span, mid)
 
 
 def test_timeout_at_1500_then_reroute_at_1600(trace: Trace) -> None:
