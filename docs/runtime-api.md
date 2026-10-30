@@ -126,6 +126,7 @@ def build(k) -> None:
     object per framing camera name (e.g. "hero", "tall"). Read k.job, k.style(), and the whole
     trace (k.trace_events, k.spans, k.signals_in(-1, k.job["tick_end"])) to plan the shot."""
 
+
 def frame(k) -> None:
     """Called before each frame renders, with k.frame, k.tick and the sampled trace current.
     Set object transforms, visibility and material values as a pure function of k.tick and
