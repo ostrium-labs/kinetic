@@ -390,6 +390,13 @@ def assemble_film(outcome: RenderOutcome, ws: Workspace) -> AssembleOutcome:
     not_ready = [s.plan_shot.shot_id for s in outcome.shots if s.result.status != "mezzanine_ok"]
     if not_ready:
         raise PipelineError("shots not rendered or failed QA: " + ", ".join(not_ready))
+    # The semantic gate: a shot whose annotations contradict the trace or its checkpoints has
+    # good pixels but a wrong story, and never becomes part of a deliverable.
+    failing = sorted(
+        {s.plan_shot.shot_id for s in outcome.shots for c in s.checks if c.status == "fail"}
+    )
+    if failing:
+        raise PipelineError("shots failing QA (fix before assembling): " + ", ".join(failing))
     tools = Tools.resolve(ws)
     plan = outcome.plan
     out = output_dir(ws, plan.film_id, plan.profile)
@@ -425,16 +432,60 @@ def qa_film(outcome: RenderOutcome, assembled: AssembleOutcome | None, ws: Works
                     detail=f"shot is {s.result.status}: {s.result.error or 'not rendered'}",
                 )
             )
-    if assembled is not None:
+    plan = outcome.plan
+    delivery = assembled.delivery if assembled is not None else None
+    if delivery is None:
+        # Standalone `kinetic qa`: re-validate the delivery already on disk, but only if it
+        # was assembled from exactly the shots the cache holds now; never drop those checks.
+        delivery, current = _existing_delivery(outcome, ws)
+        checks.append(current)
+    if delivery is not None:
         tools = Tools.resolve(ws)
-        plan = outcome.plan
         checks += check_delivery(
-            tools, assembled.delivery, plan.width, plan.height, plan.fps, plan.total_frames
+            tools, delivery, plan.width, plan.height, plan.fps, plan.total_frames
         )
-        checks += detect_black_and_freeze(tools, assembled.delivery)
+        checks += detect_black_and_freeze(tools, delivery)
     report = QaReport(film_id=outcome.plan.film_id, profile=outcome.plan.profile, checks=checks)
     report.write(output_dir(ws, outcome.plan.film_id, outcome.plan.profile) / "qa" / "report.json")
     return report
+
+
+def _existing_delivery(outcome: RenderOutcome, ws: Workspace) -> tuple[Path | None, QaCheck]:
+    """The assembled delivery for this film and profile, if it matches the current shots.
+
+    Its provenance.json records the render key of every shot it was cut from; any difference
+    from the current plan means the file on disk shows a film that no longer exists."""
+    plan = outcome.plan
+    out = output_dir(ws, plan.film_id, plan.profile)
+    name = "social-9x16.mp4" if plan.profile == "social" else "film.mp4"
+    delivery, prov = out / name, out / "provenance.json"
+    if not delivery.is_file() or not prov.is_file():
+        return None, QaCheck(
+            id="delivery.current",
+            shot_id=None,
+            status="fail",
+            detail=f"no assembled {name} for this profile (run `kinetic assemble`)",
+        )
+    try:
+        recorded = [
+            s["render_key"] for s in json.loads(prov.read_text("utf-8"))["deterministic"]["shots"]
+        ]
+    except (OSError, ValueError, KeyError, TypeError):
+        recorded = None
+    current = [s.result.render_key for s in outcome.shots]
+    if recorded != current:
+        return None, QaCheck(
+            id="delivery.current",
+            shot_id=None,
+            status="fail",
+            detail=f"{name} was assembled from different shots (run `kinetic assemble`)",
+        )
+    return delivery, QaCheck(
+        id="delivery.current",
+        shot_id=None,
+        status="pass",
+        detail=f"{name} matches the current shots; delivery checks re-run",
+    )
 
 
 def write_film_provenance(

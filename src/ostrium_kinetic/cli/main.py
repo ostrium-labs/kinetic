@@ -248,6 +248,20 @@ def _assemble_and_qa(film: Path, profile: str, *, render_first: bool, calm: bool
             progress=typer.echo,
         )
         assembled = assemble_film(outcome, ws) if outcome.ok else None
+        if assembled is None:
+            failing = sorted(
+                {
+                    s.plan_shot.shot_id
+                    for s in outcome.shots
+                    if s.result.status != "mezzanine_ok"
+                    or any(c.status == "fail" for c in s.checks)
+                }
+            )
+            typer.secho(
+                "not assembled: shots failing QA (fix before assembling): " + ", ".join(failing),
+                fg=typer.colors.RED,
+                err=True,
+            )
         report = qa_film(outcome, assembled, ws)
         prov = write_film_provenance(outcome, assembled, ws) if assembled else None
     except _pipeline_errors() as exc:

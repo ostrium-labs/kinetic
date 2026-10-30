@@ -165,6 +165,13 @@ def test_checkpoint_wrong_on_the_annotations_fails_qa_without_rerender(
         fails = qa_fails(root)
         assert fails and {c["id"] for c in fails} == {"annotations.checkpoint"}
         assert all(c["shot_id"] == "S1" for c in fails)
+        # the semantic gate: a shot failing QA never becomes part of a deliverable
+        delivery = root / "out" / FILM_ID / "preview" / "film.mp4"
+        stamp = delivery.stat().st_mtime_ns
+        refused = invoke("assemble", str(film), "--profile", "preview")
+        assert refused.exit_code == 1, refused.output
+        assert "shots failing QA" in refused.output
+        assert delivery.stat().st_mtime_ns == stamp
     finally:
         (film / "film.yaml").write_text(original, "utf-8")
     fixed = invoke("build", str(film), "--profile", "preview")
@@ -201,3 +208,26 @@ def test_qa_with_nothing_rendered_fails(tmp_path: Path) -> None:
     checks = json.loads(report.read_text("utf-8"))["checks"]
     assert any(c["id"] == "shot.status" and c["status"] == "fail" for c in checks)
     assert not (tmp_path / "out" / FILM_ID / "social" / "social-9x16.mp4").exists()
+
+
+def test_standalone_qa_keeps_and_reruns_delivery_checks(built: tuple[Path, Path, Any]) -> None:
+    """`kinetic qa` after a build must not overwrite the full report with a shots-only one."""
+    root, film, first = built
+    assert first.exit_code == 0, first.output
+    result = invoke("qa", str(film), "--profile", "preview")
+    assert result.exit_code == 0, result.output
+    report = root / "out" / FILM_ID / "preview" / "qa" / "report.json"
+    checks = {c["id"]: c for c in json.loads(report.read_text("utf-8"))["checks"]}
+    assert checks["delivery.current"]["status"] == "pass"
+    for cid in ("delivery.color", "delivery.frames", "media.black", "media.freeze"):
+        assert checks[cid]["status"] == "pass", cid
+
+
+def test_standalone_qa_without_a_delivery_says_so(tmp_path: Path) -> None:
+    film = make_workspace(tmp_path)
+    result = invoke("qa", str(film), "--profile", "preview")
+    assert result.exit_code == 1, result.output
+    report = tmp_path / "out" / FILM_ID / "preview" / "qa" / "report.json"
+    checks = {c["id"]: c for c in json.loads(report.read_text("utf-8"))["checks"]}
+    assert checks["delivery.current"]["status"] == "fail"
+    assert "kinetic assemble" in checks["delivery.current"]["detail"]
