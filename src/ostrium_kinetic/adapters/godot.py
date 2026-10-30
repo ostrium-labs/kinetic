@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from ostrium_kinetic import canonical, proc
 from ostrium_kinetic.env.hardware import png_size
 from ostrium_kinetic.env.tools import discover, probe_version, resolve
+from ostrium_kinetic.gpulock import gpu_lock
 from ostrium_kinetic.job import (
     ANNOTATIONS_FILE,
     FRAMES_DIR,
@@ -368,7 +369,9 @@ class GodotAdapter:
 
         args = godot_command(exe, project, run_dir, job)
         try:
-            result = run_logged(args, run_dir / LOG_FILE, render_timeout(job.frame_count))
+            # One GPU render at a time on this machine; the timeout starts once we hold it.
+            with gpu_lock(f"godot {job.film_id}/{job.shot_id}"):
+                result = run_logged(args, run_dir / LOG_FILE, render_timeout(job.frame_count))
         except OSError as exc:
             raise AdapterError(f"cannot start Godot ({exe}): {exc}") from exc
         for wav in frames_dir.glob("*.wav"):  # Movie Maker always writes the audio track
