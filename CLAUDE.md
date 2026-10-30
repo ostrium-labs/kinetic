@@ -5,13 +5,15 @@ measurements into reproducible technical films. A simulation writes a typed, int
 trace; renderers sample that trace at integer frame times.
 Current milestone: **M2**. The Godot adapter renders shots to verified frames; the pipeline
 (`render`, `assemble`, `qa`, `build`) encodes FFV1 mezzanines, assembles a master and a
-delivery file, runs QA (`docs/qa.md`) and writes `provenance.json`. Blender and Manim
-adapters arrive in M4.
+delivery file, runs QA (`docs/qa.md`) and writes `provenance.json`. The Manim adapter (M4)
+renders `renderer: manim` shots on the CPU (`examples/manim-trace-timeline`); Blender
+arrives in M4.
 
 ## Commands
 
 ```bash
 uv sync                                         # install from uv.lock (Python 3.12)
+uv sync --extra manim                           # + Manim CE 0.22.1 for renderer: manim shots
 uv run kinetic doctor [--json] [--deep]         # tool discovery, versions, shadowing, GPU, encoders, disk
 uv run kinetic validate examples/smoke-failover # schema, cross-refs, evidence rules, sims, checkpoints
 uv run kinetic sim examples/smoke-failover [--shot S1] [--force]   # run sims into the trace cache
@@ -21,6 +23,7 @@ uv run kinetic render examples/smoke-failover --profile preview [--shot S1] [--f
 uv run kinetic assemble examples/smoke-failover --profile preview  # master.mkv, film.mp4, contact sheets, QA, provenance
 uv run kinetic qa examples/smoke-failover --profile preview        # out/<film_id>/<profile>/qa/report.json; 1 on any fail
 uv run kinetic build examples/smoke-failover --profile preview     # render + assemble + qa + provenance
+uv run kinetic build examples/manim-trace-timeline --profile preview  # the Manim example (needs the extra)
 uv run kinetic schema [--check]                 # regenerate / verify the committed JSON Schemas
 uv run pytest -m "not renderer"                 # unit suites (renderer tests skip without tools)
 uv run ruff check && uv run ruff format --check
@@ -76,6 +79,8 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 | `job.py` | Core/renderer boundary: `ShotJob` (job.json), `FrameAnnotation`, `ShotResult` (shot.json), `RendererAdapter` |
 | `pipeline.py` | Render (cached by render key) -> mezzanine -> assemble -> QA -> provenance |
 | `adapters/godot.py` | Godot 4.7 adapter: per-run project, Movie Maker run, strict output check |
+| `adapters/manim.py` | Manim adapter: probes `import manim` in the interpreter, runs `manim_runtime.run`, strict output check |
+| `manim_runtime/` | Runs inside the Manim subprocess: `KineticScene` (build/frame driver, Pango text helpers), `Kinetic` (`self.k`: sampled trace, track/label annotations), `run.py` (RGB frames, annotations) |
 | `media/` | ffmpeg/ffprobe resolution and runs, FFV1 mezzanine, concat master, delivery encode, probes |
 | `qa/` | Frame, annotation (parity, checkpoints, layout) and media checks; contact sheets, stills, `report.json` |
 | `provenance.py` | `provenance.json`: a deterministic part (inputs, keys, tool versions) plus outputs and environment |
@@ -84,8 +89,9 @@ success: read `qa/report.json` and view the stills and contact sheets (`render-a
 
 Other places: `renderers/godot/` (the Godot runtime project, `addons/kinetic_runtime/`: trace
 sampler, runner, `Kinetic` annotation API), `examples/smoke-failover/` (film.yaml,
-`sim/failover.py`, `scenes/godot/`), `tests/unit/`, `tests/integration/` (need Godot and FFmpeg;
-skipped when absent), `tests/golden/`, `docs/`, `.claude/`.
+`sim/failover.py`, `scenes/godot/`), `examples/manim-trace-timeline/` (the same sim as a Manim
+timeline, `scenes/manim/timeline.py`), `tests/unit/`, `tests/integration/` (need Godot, FFmpeg
+or the manim extra; skipped when absent), `tests/golden/`, `docs/`, `.claude/`.
 
 ## Windows notes
 
@@ -100,6 +106,9 @@ skipped when absent), `tests/golden/`, `docs/`, `.claude/`.
 - Tool paths that are not on PATH go in `kinetic.toml` `[tools]` (copy
   `kinetic.toml.example`); `KINETIC_<TOOL>` environment variables override it.
 - Always pass subprocess arguments as lists; never `shell=True`.
+- Manim: no LaTeX on these machines. Scenes use Pango text (`self.text`/`self.markup`) with
+  installed fonts (Noto Sans, DejaVu Sans Mono); `MathTex`, a default `DecimalNumber` and
+  numbered `Axes` fail. A frozen `wait()` writes one PNG, so scenes never call `play`/`wait`.
 
 ## Where the plan lives
 
@@ -110,5 +119,6 @@ skipped when absent), `tests/golden/`, `docs/`, `.claude/`.
   `docs/runtime-api.md` (renderer runtime API), `docs/qa.md` (every QA check and where it runs).
 - Skills in `.claude/skills/`: `film-director` (sources -> claims -> shot list),
   `scene-architect` (simulation, timemap, checkpoints), `godot-scene` (Godot scenes on the
-  runtime API), `render-and-verify` (render, read QA, view stills and contact sheets).
+  runtime API), `manim-scene` (Manim scenes: `Shot(KineticScene)`, layout grid, no LaTeX),
+  `render-and-verify` (render, read QA, view stills and contact sheets).
 - Agent: `.claude/agents/film-critic.md` (independent critique of a rendered film).
