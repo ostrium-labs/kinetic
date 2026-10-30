@@ -83,6 +83,13 @@ def _span_mismatch(ann: dict[str, Any] | None, exact: Any) -> str | None:
         return f"active_span {exact.span.span_id!r} has no numeric progress"
     if abs(float(progress) - float(exact.progress)) > PROGRESS_TOLERANCE:
         return f"progress {progress} vs exact {exact.progress} ({float(exact.progress):.9f})"
+    planned = ann.get("planned_progress")
+    if planned is not None:
+        if isinstance(planned, bool) or not isinstance(planned, int | float):
+            return f"active_span {exact.span.span_id!r} has non-numeric planned_progress"
+        want = exact.planned_progress
+        if abs(float(planned) - float(want)) > PROGRESS_TOLERANCE:
+            return f"planned_progress {planned} vs exact {want} ({float(want):.9f})"
     return None
 
 

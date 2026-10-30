@@ -202,7 +202,11 @@ def _annotate(job: ShotJob, trace: Trace) -> list[FrameAnnotation]:
             active = trace.active_span_of(e, tick)
             span = None
             if active is not None:
-                span = {**span_view(active.span), "progress": float(active.progress)}
+                span = {
+                    **span_view(active.span),
+                    "progress": float(active.progress),
+                    "planned_progress": float(active.planned_progress),
+                }
             entities[e] = EntityAnnotation(
                 state=dict(states.get(e, {})),
                 active_span=span,
@@ -246,6 +250,25 @@ def test_annotations_wrong_state_and_progress(tmp_path: Path, trace: Trace) -> N
     cps = {x.data["frame"]: x for x in c if x.id == "annotations.checkpoint"}
     assert cps[40].status == "fail" and "expected 'failed', got 'up'" in cps[40].detail
     assert cps[30].status == "pass"
+
+
+def test_annotations_planned_progress_parity(tmp_path: Path, trace: Trace) -> None:
+    job = _job()
+    frames = _annotate(job, trace)
+    span = frames[30].entities["packet:1"].active_span
+    assert span is not None and span["planned_end_tick"] == 1488
+    # A renderer that placed the lost packet by actual-interval progress: planned_progress
+    # annotated as progress.
+    span["planned_progress"] = span["progress"]
+    no_planned = frames[31].entities["packet:1"].active_span
+    assert no_planned is not None
+    del no_planned["planned_progress"]  # optional: absent is not compared
+    path = _write(tmp_path / "a.jsonl", frames)
+    parity = next(
+        x for x in check_annotations(job, path, trace, [], "S1") if x.id == "annotations.parity"
+    )
+    assert parity.status == "fail" and parity.data["mismatch_count"] == 1
+    assert "frame 30" in parity.detail and "planned_progress" in parity.detail
 
 
 def test_annotations_invisible_checkpoint_entity(tmp_path: Path, trace: Trace) -> None:

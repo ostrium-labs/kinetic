@@ -6,7 +6,8 @@ expectations against what a renderer annotated. Both reduce an entity at a tick 
 semantics cannot drift apart.
 
 Span dicts use the runtime's shape: span_id, kind, interp, outcome, begin_tick, end_tick,
-the span's attrs, and optionally progress. Fixed span fields win over attrs of the same name.
+planned_end_tick when the span has one, the span's attrs, and optionally progress and
+planned_progress. Fixed span fields win over attrs of the same name.
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ def span_view(span: Any) -> dict[str, Any]:
         begin_tick=span.begin_tick,
         end_tick=span.end_tick,
     )
+    if span.planned_end_tick is not None:
+        view["planned_end_tick"] = span.planned_end_tick
     return view
 
 
