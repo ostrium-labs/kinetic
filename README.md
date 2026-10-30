@@ -2,6 +2,8 @@
 
 **Programmable cinematography for engineering.**
 
+[![ci](https://github.com/ostrium-labs/kinetic/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ostrium-labs/kinetic/actions/workflows/ci.yml)
+
 Kinetic turns simulations, traces and measurements into reproducible technical films. Every moving thing on screen is either data, or labelled as not data.
 
 > Status: **v0.1 in development, M2 in progress.** The contract, simulation core, plan compiler and environment doctor exist (M1). M2 adds the Godot renderer adapter, lossless FFV1 mezzanines, assembly, QA (`docs/qa.md`) and provenance, proven on `examples/smoke-failover` and the 1080p look-development clip `examples/lookdev-failover`. See `docs/architecture-proposal.md` for the full design and roadmap.
