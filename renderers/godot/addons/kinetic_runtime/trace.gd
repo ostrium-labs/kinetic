@@ -1,6 +1,7 @@
 ## Trace sampler. Must match the reference in src/ostrium_kinetic/sim/trace.py exactly:
 ##   state_at(t)     fold trace.jsonl events with event.tick <= t
 ##   spans_active(t) spans with begin_tick <= t < end_tick, with progress by interp
+##   planned progress over [begin_tick, planned_end_tick] when a span has a planned end
 ## State is precomputed once per distinct event tick, so sampling a frame is a binary search.
 ## Returned dictionaries are shared snapshots: callers must not modify them.
 extends RefCounted
@@ -104,7 +105,8 @@ func spans_active(tick: int) -> Array:
 
 
 ## The entity's most recent span that has ended by `tick` (end_tick <= tick), as a span
-## view with progress 1.0, or {} if none. Lets a scene show where an entity ended up
+## view with progress 1.0 and planned_progress where it stopped (short of 1.0 for a span cut
+## before its planned end), or {} if none. Lets a scene show where an entity ended up
 ## (delivered, lost) as a pure function of the tick.
 func last_span(entity: String, tick: int) -> Dictionary:
 	var best: Dictionary = {}
@@ -120,23 +122,38 @@ func last_span(entity: String, tick: int) -> Dictionary:
 	return view
 
 
-## {span_id, kind, interp, outcome, begin_tick, end_tick, progress} plus the span's attrs.
-## Span fields win over attrs with the same name.
+## {span_id, kind, interp, outcome, begin_tick, end_tick, progress, planned_progress} plus
+## planned_end_tick when the span has one, plus the span's attrs. Span fields win over attrs
+## with the same name.
 func span_view(span: Dictionary, tick: int) -> Dictionary:
 	var view: Dictionary = span["attrs"].duplicate()
 	for key in ["span_id", "kind", "interp", "outcome", "begin_tick", "end_tick"]:
 		view[key] = span[key]
+	if span.get("planned_end_tick") != null:
+		view["planned_end_tick"] = span["planned_end_tick"]
 	view["progress"] = progress(span, tick)
+	view["planned_progress"] = planned_progress(span, tick)
 	return view
 
 
 ## Progress of an active span at `tick`: step -> 0, linear -> u, curve:<name> -> keyed.
 func progress(span: Dictionary, tick: int) -> float:
+	return _interp_at(span, tick, int(span["end_tick"]))
+
+
+## Progress over the planned interval [begin_tick, planned_end_tick]; equals progress() when
+## the span has no planned end. Use it to place an entity on a path that may be cut short.
+func planned_progress(span: Dictionary, tick: int) -> float:
+	var planned: Variant = span.get("planned_end_tick")
+	return _interp_at(span, tick, int(span["end_tick"]) if planned == null else int(planned))
+
+
+func _interp_at(span: Dictionary, tick: int, end: int) -> float:
 	var interp: String = span["interp"]
 	if interp == "step":
 		return 0.0
 	var num: int = tick - int(span["begin_tick"])
-	var den: int = int(span["end_tick"]) - int(span["begin_tick"])
+	var den: int = end - int(span["begin_tick"])
 	if interp == "linear":
 		return float(num) / float(den)
 	var keys: Array = span["_keys"]

@@ -86,12 +86,13 @@ func alive(entity: String) -> bool:
 	return _state.has(entity)
 
 
-## The entity's active span (fields, attrs and "progress"), or {}.
+## The entity's active span (fields, attrs, "progress" and "planned_progress"), or {}.
 func active_span(entity: String) -> Dictionary:
 	return _active_by_entity.get(entity, {}).duplicate()
 
 
 ## The entity's most recent ended span (end_tick <= tick), progress 1.0, or {}.
+## planned_progress is where it stopped: short of 1.0 when it was cut before its planned end.
 func last_span(entity: String) -> Dictionary:
 	return {} if trace == null else trace.last_span(entity, tick)
 

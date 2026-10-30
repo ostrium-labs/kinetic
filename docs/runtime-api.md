@@ -34,6 +34,11 @@ equal the Movie Maker frame index (0-based).
 - **Active spans at tick t:** spans in `spans.jsonl` with `begin_tick <= t < end_tick`.
 - **Progress:** `step` gives 0; `linear` gives `(t - begin)/(end - begin)`; `curve:<name>`
   interpolates linearly between `keys` `[u, p]` (strings `"a/b"`).
+- **Planned progress:** the same, with `planned_end_tick` in place of `end` when the span has
+  one (otherwise equal to progress). A span cut short (`lost`, `aborted`) reaches progress 1
+  at the cut, so **a runtime or scene must use planned progress to place an entity on an
+  interrupted path**, and the stopped position (planned progress at `end_tick`) after the span
+  has ended. See "Planned end" in `docs/contract.md`.
 - Runtimes may not ease the progress of entities that carry claims. They may style
   geometry, trails, materials, cameras and illustrative elements freely.
 
@@ -51,8 +56,8 @@ The autoload singleton `Kinetic` is processed before scene nodes (`process_prior
 | `evidence: String`, `time_label: String` | `job.evidence` / `job.time_label`, or `""` when absent |
 | `state(entity) -> Dictionary` | entity state at `tick`; `{}` if not alive |
 | `alive(entity) -> bool` | |
-| `active_span(entity) -> Dictionary` | `{span_id, kind, interp, outcome, begin_tick, end_tick, progress, ...attrs}`, or `{}`; span fields win over attrs of the same name |
-| `last_span(entity) -> Dictionary` | the entity's most recent span with `end_tick <= tick` (progress 1.0), or `{}`; Python twin `Trace.last_span_of`. Use it to show where an entity ended up (e.g. a delivered packet docked at its destination) without remembering state across frames |
+| `active_span(entity) -> Dictionary` | `{span_id, kind, interp, outcome, begin_tick, end_tick, progress, planned_progress, ...attrs}` plus `planned_end_tick` when the span has one, or `{}`; span fields win over attrs of the same name. Place entities by `planned_progress` |
+| `last_span(entity) -> Dictionary` | the entity's most recent span with `end_tick <= tick`, or `{}`: progress 1.0 and `planned_progress` = where it stopped (short of 1.0 for a span cut before its planned end; Python `stopped_progress`); Python twin `Trace.last_span_of`. Use it to show where an entity ended up (e.g. a delivered packet docked at its destination) without remembering state across frames |
 | `spans_active() -> Array` | all active spans, same dictionaries plus `entity` |
 | `signals_in(from_tick, to_tick) -> Array` | `signal` events with `from_tick < tick <= to_tick` |
 | `track(entity, node: Node3D)` | include the node's screen-space bbox in annotations |
@@ -84,6 +89,7 @@ directory.
   camera, from the corners in front of it, clipped to the viewport and rounded to 0.01 px.
   It is `null`, with `visible: false`, when the node is hidden, entirely behind the camera or
   off screen. `state` is `{}` and `active_span` `null` when the entity is not alive or idle.
+  `active_span` includes `planned_progress`; QA compares it with the trace (1e-6) when present.
   `labels` lists `[text, [x0, y0, x1, y1]]` for every registered `Control` visible in tree
   (unclipped, so QA can check safe areas).
 - **Scenes:** the adapter copies the scene's directory (e.g. `scenes/godot/`, with everything
@@ -97,5 +103,6 @@ directory.
   `SCRIPT ERROR`.
 - **Parity tool:** `godot --headless --path <project> --script
   res://addons/kinetic_runtime/tools/sample_trace.gd -- --trace <dir> --ticks 0,10,...` prints
-  `KINETIC_SAMPLE {"<tick>": {"state": ..., "spans": [...]}}` (`--headless` is fine here
-  because Movie Maker is not used).
+  `KINETIC_SAMPLE {"<tick>": {"state": ..., "spans": [...], "last": {"<entity>": ...}}}`
+  (`last`: the `last_span` view of every entity whose span has ended by that tick;
+  `--headless` is fine here because Movie Maker is not used).

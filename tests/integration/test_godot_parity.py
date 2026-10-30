@@ -14,7 +14,7 @@ import pytest
 from ostrium_kinetic import canonical
 from ostrium_kinetic.adapters.godot import RUNTIME_DIR
 from ostrium_kinetic.env.tools import discover, resolve
-from ostrium_kinetic.sim import Outcome, Trace, TraceMeta, World
+from ostrium_kinetic.sim import Outcome, Span, Trace, TraceMeta, World
 from ostrium_kinetic.sim.model import SimSource
 from ostrium_kinetic.sim.runner import ensure_trace
 from ostrium_kinetic.sim.trace import (
@@ -24,6 +24,7 @@ from ostrium_kinetic.sim.trace import (
     TRACE_FILE,
     ActiveSpan,
     encode_jsonl,
+    stopped_progress,
 )
 
 _FOUND = resolve(discover("godot", None, probe=False))
@@ -69,9 +70,11 @@ def _sample(project: Path, trace_dir: Path, ticks: list[int]) -> dict[str, Any]:
     return json.loads(line.removeprefix("KINETIC_SAMPLE "))
 
 
-def _expected_span(active: ActiveSpan) -> dict[str, Any]:
-    span = active.span
-    return {
+PROGRESS_KEYS = ("progress", "planned_progress")
+
+
+def _view(span: Span, progress: Fraction, planned: Fraction) -> dict[str, Any]:
+    view: dict[str, Any] = {
         **span.attrs,
         "span_id": span.span_id,
         "kind": span.kind,
@@ -79,9 +82,25 @@ def _expected_span(active: ActiveSpan) -> dict[str, Any]:
         "outcome": span.outcome.value,
         "begin_tick": span.begin_tick,
         "end_tick": span.end_tick,
-        "entity": span.entity,
-        "progress": float(active.progress),
+        "progress": float(progress),
+        "planned_progress": float(planned),
     }
+    if span.planned_end_tick is not None:
+        view["planned_end_tick"] = span.planned_end_tick
+    return view
+
+
+def _expected_span(active: ActiveSpan) -> dict[str, Any]:
+    view = _view(active.span, active.progress, active.planned_progress)
+    return {**view, "entity": active.span.entity}
+
+
+def _assert_view(got: dict[str, Any], want: dict[str, Any], where: Any) -> None:
+    for key in PROGRESS_KEYS:
+        assert got[key] == pytest.approx(want[key], abs=1e-9), (where, key)
+    assert {k: v for k, v in got.items() if k not in PROGRESS_KEYS} == {
+        k: v for k, v in want.items() if k not in PROGRESS_KEYS
+    }, where
 
 
 def _assert_parity(trace: Trace, sampled: dict[str, Any], ticks: list[int]) -> None:
@@ -97,10 +116,16 @@ def _assert_parity(trace: Trace, sampled: dict[str, Any], ticks: list[int]) -> N
         want_spans = [_expected_span(a) for a in trace.spans_active(t)]
         assert len(got["spans"]) == len(want_spans), f"spans at tick {t}"
         for g, w in zip(got["spans"], want_spans, strict=True):
-            assert g["progress"] == pytest.approx(w["progress"], abs=1e-9), (t, w["span_id"])
-            assert {k: v for k, v in g.items() if k != "progress"} == {
-                k: v for k, v in w.items() if k != "progress"
-            }
+            _assert_view(g, w, (t, w["span_id"]))
+        # last_span: progress 1.0, planned_progress where the span stopped.
+        want_last = {}
+        for entity in {s.entity for s in trace.spans}:
+            last = trace.last_span_of(entity, t)
+            if last is not None:
+                want_last[entity] = _view(last, Fraction(1), stopped_progress(last))
+        assert sorted(got["last"]) == sorted(want_last), f"last spans at tick {t}"
+        for entity, w in want_last.items():
+            _assert_view(got["last"][entity], w, (t, "last", entity))
 
 
 def test_smoke_failover_parity(
@@ -160,19 +185,29 @@ def test_step_curve_destroy_and_types_parity(project: Path, tmp_path: Path) -> N
     rec.create("node:A", status="up", load=0, temp=0.25, ok=True)
     rec.create("packet:1", status="queued")
     rec.create("packet:2", status="queued")
+    rec.create("packet:3", status="queued")
     w.now = 10
     rec.set("node:A", load=5)
     rec.set("node:A", status='busy "quoted" é', load=7, temp=1.5, ok=False)
     w.now = 20
     rec.destroy("node:A")
     w.now = 100
-    rec.begin("tx:1", "packet:1", "transit", via="link:P", size=3, weight=0.5)
+    rec.begin("tx:1", "packet:1", "transit", via="link:P", size=3, weight=0.5, planned_end=323)
     rec.begin(
         "ramp:2", "packet:2", "ramp", interp="curve:ease", keys=[(0, 0), ("1/3", "1/4"), (1, 1)]
+    )
+    rec.begin(
+        "ramp:3",
+        "packet:3",
+        "ramp",
+        interp="curve:ease",
+        keys=[(0, 0), ("1/3", "1/4"), (1, 1)],
+        planned_end=391,
     )
     w.now = 197
     rec.end("tx:1", Outcome.LOST)
     rec.end("ramp:2")
+    rec.end("ramp:3", Outcome.ABORTED)
     w.now = 300
     rec.begin("hold:1", "packet:1", "hold", interp="step")
     w.now = 400
