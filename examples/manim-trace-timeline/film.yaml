@@ -1,0 +1,63 @@
+# The Manim adapter's example: the smoke-failover trace drawn as a precise timeline.
+# One lane per packet; span bars grow in sim time; the lost packet's bar stops at the cut and a
+# dashed ghost runs on to its planned arrival. Every number on screen is a tick from the trace.
+kinetic: "0.1"
+id: kinetic.manim-trace-timeline
+title: "Failover, tick by tick"
+fps: 30
+
+assumptions:
+  - id: A1
+    text: "Latencies, timeout and reroute delay are illustrative values chosen for legibility, not measurements of any network."
+
+claims:
+  - id: C1
+    text: "When the primary link fails mid-transfer, the sender's timeout triggers a resend over the secondary link."
+    evidence: simulated
+  - id: C2
+    text: "In this simulation (seed 7) the first packet is lost at 1200 ms, 288 ms before its planned arrival at 1488 ms; the resend arrives at 2812 ms and its acknowledgement at 3412 ms."
+    evidence: simulated
+    notes: "Values are read from the trace of examples/smoke-failover/sim/failover.py with the params below; the scene prints them from spans.jsonl, never from constants."
+
+sequences:
+  - id: Q1
+    title: "Failover timeline"
+    shots:
+      - id: T1
+        intent: "Show, on one time axis, that packet 1 was cut short of its planned arrival and that the resend and its acknowledgement complete over link S."
+        renderer: manim
+        scene: scenes/manim/timeline.py
+        evidence: simulated
+        claims: [C1, C2]
+        frames: 210
+        sim:
+          module: ../smoke-failover/sim/failover.py
+          params:
+            latency_p_s: "1.5"
+            latency_s_s: "1.2"
+            ack_latency_s: "0.6"
+            cut_p_at_s: "1.2"
+            timeout_s: "1.5"
+            reroute_delay_s: "0.1"
+            jitter_ms: 20
+            end_s: "3.5"
+          seed: 7
+        timemap: { sim_start_s: 0, sim_end_s: 3.5, label: "SLOWED 2×" }
+        framings:
+          "16:9": { camera: wide }
+        checkpoints:
+          - at_frame: 30
+            expect:
+              - { entity: "packet:1", field: active_span.via, equals: "link:P" }
+              - { entity: "packet:1", field: status, equals: in_flight }
+          - at_frame: 90
+            expect:
+              - { entity: "packet:1", field: status, equals: lost }
+              - { entity: "packet:1", field: active_span, equals: null }
+          - at_frame: 130
+            expect:
+              - { entity: "packet:2", field: active_span.via, equals: "link:S" }
+          - at_frame: 200
+            expect:
+              - { entity: "packet:2", field: status, equals: delivered }
+              - { entity: "packet:ack2", field: active_span.via, equals: "link:S" }

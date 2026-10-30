@@ -32,6 +32,11 @@ uv run kinetic plan examples/smoke-failover --profile preview
 
 Tool paths that are not on `PATH` go in a local `kinetic.toml` (see `kinetic.toml.example`).
 
+Manim shots (`renderer: manim`) render in Kinetic's own environment: `uv sync --extra manim`
+installs Manim Community 0.22.1, then `uv run kinetic build examples/manim-trace-timeline --profile preview`
+renders the smoke-failover trace as a timeline. No LaTeX is needed; scenes use Pango text
+(`docs/runtime-api.md`, "Manim runtime").
+
 ## Commands
 
 | Command | Does |

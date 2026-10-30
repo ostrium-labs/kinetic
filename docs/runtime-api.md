@@ -1,8 +1,10 @@
 # Renderer runtime API (contract v0.1)
 
 This is the contract between the Kinetic core and the code that runs *inside* a renderer
-(Godot in M2; Blender and Manim in M4). The core never imports renderer code, and runtimes
-never import `ostrium_kinetic`; they exchange only files.
+(Godot in M2; Blender and Manim in M4). The core never imports renderer code, and the Godot
+and Blender runtimes never import `ostrium_kinetic`; they exchange only files. The Manim
+runtime is the exception: it runs in Kinetic's own Python and reuses its trace sampler (see
+"Manim runtime"), but still talks to the adapter only through the same files.
 
 ## Files in a shot run directory
 
@@ -152,3 +154,94 @@ counts and resolution of effects. Failures write `runtime_error.txt` and exit no
 Scenes may import helper modules from their own directory (the runner puts the scene's
 directory on `sys.path`) and may use only `bpy`, `bmesh`, `mathutils`, `bpy_extras` and the
 standard library.
+
+## Manim runtime (`src/ostrium_kinetic/manim_runtime/`, Apache-2.0)
+
+Manim CE 0.22.1 is MIT-licensed and Python-native, so unlike the Godot and Blender runtimes
+this one runs in Kinetic's own Python environment and imports `ostrium_kinetic`: it samples
+the trace with `ostrium_kinetic.sim.trace` (the reference sampler) instead of re-implementing
+it. Install the renderer with `uv sync --extra manim`. The adapter
+(`adapters/manim.py`) starts
+
+```
+<python> -m ostrium_kinetic.manim_runtime.run --kinetic-job <run_dir>/job.json
+```
+
+with `<python>` = the interpreter running Kinetic (`sys.executable`). It first runs
+`import manim` in that interpreter; if that fails, the render stops with an `AdapterError`
+naming `uv sync --extra manim`. The renderer version in render keys is `manim.__version__`;
+the runtime hash covers `manim_runtime/*.py`. Manim renders on the CPU (Cairo), so no GPU lock
+is taken.
+
+A Manim shot scene is a Python module (the shot's `scene`, e.g.
+`scenes/manim/timeline.py`) that defines `class Shot(KineticScene)`:
+
+```python
+from ostrium_kinetic.manim_runtime.scene import KineticScene
+
+
+class Shot(KineticScene):
+    def build(self) -> None:
+        """Called once: create mobjects, self.add() them, register persistent labels
+        (self.k.label in build) and tracks. Read the whole trace (self.k.spans,
+        self.k.signals_in(-1, self.k.tick_end)) to plan the layout."""
+
+    def frame(self) -> None:
+        """Called before each frame with self.k at that frame. Set positions, sizes, colours
+        and text as a pure function of self.k; never keep state between calls."""
+```
+
+`construct()` belongs to the base class and is not overridden. It calls `build()`, then for
+each frame `f` in `range(frame_count)`: sets `self.k` to frame `f`, calls `frame()`, records
+the annotation line (after `frame()`, before the frame is drawn), and calls
+`self.wait(1 / fps, frozen_frame=False)`, which writes exactly one image. A frozen `wait()`
+writes only one image however long it is (M0), so scenes never call `play()` or `wait()`
+themselves; all motion is a function of `self.k`. After every frame the base class checks
+that Manim has written exactly `f + 1` images.
+
+`self.k` (`manim_runtime/kinetic.py`, `Kinetic`) has the same members and dictionaries as
+the Godot runtime: `job`, `frame`, `tick`, `sim_seconds`, `shot_progress`, `calm`,
+`evidence`, `time_label`, `camera`, `framing`, `width`, `height`, `frame_count`,
+`tick_start`, `tick_end`, `style(key, default)`, `state(entity)`, `alive(entity)`,
+`active_span(entity)`, `last_span(entity)`, `spans_active()`, `signals_in(from, to)`, plus
+`trace` (the loaded `Trace`) and `spans` (every resolved span), and:
+
+| Member | Meaning |
+|---|---|
+| `track(entity, mobject)` | report the mobject's screen bbox for `entity` on every frame; calling it again replaces the mobject (scenes that rebuild mobjects in `frame()` re-track each frame) |
+| `label(text, mobject)` | report an on-screen text's bbox; registered in `build()` it is reported on every frame it is in the scene, registered in `frame()` on that frame only |
+| `px(n)` | scene units for `n` pixels on a frame 1080 px high, at any output size (QA's references are 1080-high) |
+| `to_pixels(x, y)` | scene point to output pixel, origin top-left |
+
+`KineticScene` helpers: `self.text(s, size, role="sans"|"mono", color=...)` and
+`self.markup(pango_markup, size, ...)` create Pango text whose **capital height** is `size`
+px at 1080 (font-independent; QA's minimum label height is 28 px at 1080, so use 30 for
+labels); `self.font(role)` returns the font for a role from style tokens `font_sans` /
+`font_mono` (defaults "Noto Sans" and "DejaVu Sans Mono") and fails with exit code 3 when the
+font is not installed, because Pango silently substitutes a serif. No LaTeX: `MathTex`, the
+default `DecimalNumber` and `Axes(include_numbers=True)` need it and fail. Use
+`Text`/`MarkupText`, `DecimalNumber(mob_class=Text)` and `label_constructor=Text`.
+
+### Manim runtime details (M4)
+
+- **Frame geometry:** frame height is 8 scene units and the width follows the job's aspect
+  (14.22 for 16:9, 4.5 for 9:16), centred on the origin. Output size is `width`x`height` from
+  the job; `background_color` comes from the style token `background` (default `#0E1116`).
+- **Output:** Manim renders a PNG sequence (`format=png_sequence`, `disable_caching`) into
+  `<run_dir>/manim_media/`; the runtime converts each image to 8-bit RGB (Manim writes RGBA)
+  as `frames/frame%08d.png` and deletes the media directory. The adapter fails a run that
+  leaves it behind.
+- **Annotations:** `bbox` is the union of the points of the tracked mobject's family members
+  that are in the scene and have a non-zero fill or stroke opacity, mapped to pixels, clipped
+  to the frame and rounded to 0.01 px; `null` with `visible: false` when none is on screen.
+  Bezier control points are included, so curved outlines may be slightly over-estimated.
+  Labels report the text's ink bbox, unclipped. Lines are written with sorted keys and full
+  float precision; `progress` and `planned_progress` are `float(Fraction)` of the exact values.
+- **Determinism:** same job, same frames, byte for byte (Cairo, Pango and PNG writing carry no
+  clock or randomness; the job's `seed` seeds Manim's RNG). Checked in
+  `tests/integration/test_manim_render.py`.
+- **Errors:** exit codes 1 scene raised (traceback in `render.log`), 2 bad job, 3 font
+  missing, 4 trace unreadable, 5 scene module or `Shot(KineticScene)` missing, 6 wrong number
+  of images, 7 manim not importable; each also writes `runtime_error.txt`.
+- **Scenes** are imported from the film directory with their own directory on `sys.path`
+  (helpers beside them are importable). The scene's directory is part of the render key.

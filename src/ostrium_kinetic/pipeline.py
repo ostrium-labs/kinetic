@@ -50,9 +50,11 @@ def adapter_for(renderer: str) -> RendererAdapter:
         from ostrium_kinetic.adapters.godot import GodotAdapter
 
         return GodotAdapter()
-    raise PipelineError(
-        f"renderer {renderer!r} has no adapter yet (Blender and Manim arrive in M4)"
-    )
+    if renderer == "manim":
+        from ostrium_kinetic.adapters.manim import ManimAdapter
+
+        return ManimAdapter()
+    raise PipelineError(f"renderer {renderer!r} has no adapter yet (Blender arrives in M4)")
 
 
 def output_dir(ws: Workspace, film_id: str, profile: str) -> Path:
