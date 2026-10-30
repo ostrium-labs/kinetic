@@ -126,6 +126,7 @@ order. Fields that do not apply are omitted.
 | `kind` | str, e.g. `transit` | `span.begin` |
 | `interp` | `step` / `linear` / `curve:<name>` | `span.begin` |
 | `keys` | [[u, p], ...] Exact | `span.begin` with a curve |
+| `planned_end_tick` | int, > the begin tick | `span.begin`, optional (see Planned end) |
 | `outcome` | `completed` / `lost` / `aborted` | `span.end` |
 | `attrs` | {name: scalar} | `signal`, `span.begin` (when non-empty) |
 
@@ -154,7 +155,7 @@ Each type is declared with its fields and their types (`str`, `int`, `float`, `b
 One resolved span per line, ordered by `(begin_tick, end_tick, span_id)`:
 
 ```json
-{"attrs":{"from":"node:A","to":"node:B","via":"link:P"},"begin_tick":0,"end_tick":1200,"entity":"packet:1","interp":"linear","kind":"transit","outcome":"lost","span_id":"tx:packet:1"}
+{"attrs":{"from":"node:A","to":"node:B","via":"link:P"},"begin_tick":0,"end_tick":1200,"entity":"packet:1","interp":"linear","kind":"transit","outcome":"lost","planned_end_tick":1488,"span_id":"tx:packet:1"}
 ```
 
 A span is active on `[begin_tick, end_tick)`: active on its begin tick, inactive on its end
@@ -168,6 +169,33 @@ tick. Progress while active:
 
 Zero-duration spans are allowed only with `step`. Every span must be closed when the
 simulation ends. Renderers may not ease the progress of claim-bearing entities.
+
+#### Planned end
+
+A span cut short (outcome `lost` or `aborted`) ends at the failure tick, so its `progress`
+reaches 1 at the cut: drawn by `progress`, a lost packet would appear to arrive. A span may
+therefore carry `planned_end_tick`, the tick it was planned to end on (e.g. send tick + link
+latency), set with `rec.begin(..., planned_end=tick)`. Rules:
+
+- optional; omitted from `trace.jsonl` and `spans.jsonl` when unset, so traces of
+  simulations that do not use it are byte-identical to traces without the field;
+- must be greater than the begin tick; not allowed with `step`;
+- a span may end before its planned end (cut short), on it (ran as planned), never after it.
+
+**Planned progress** at tick t uses the planned interval instead of the actual one:
+`u = (t - begin) / (planned_end - begin)`, then the span's interp (`linear`: u; `curve`: keys
+at u). Without `planned_end_tick` it equals `progress`. `progress` keeps its meaning (the
+actual interval) for compatibility.
+
+**Stopped progress** of an ended span is its planned progress at `end_tick`: where it
+stopped. For the smoke-failover packet 1 (seed 7) that is 1200/1488, about 0.81; for a span
+that ran to its planned end it is 1 (linear).
+
+**Renderers must use planned progress to place an entity on an interrupted path** (and
+stopped progress after the span has ended). Reference: `planned_progress(span, tick)`,
+`stopped_progress(span)` and `ActiveSpan.planned_progress` in
+`ostrium_kinetic.sim.trace`. Adding the field did not change the contract version: it is
+optional and additive.
 
 ### State semantics
 

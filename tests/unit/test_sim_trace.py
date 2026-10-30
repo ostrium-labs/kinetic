@@ -8,7 +8,13 @@ import pytest
 from ostrium_kinetic.sim import Outcome, Span, Trace, TraceMeta, World
 from ostrium_kinetic.sim.model import SimSource
 from ostrium_kinetic.sim.runner import ensure_trace
-from ostrium_kinetic.sim.trace import SPANS_FILE, TRACE_FILE, span_progress
+from ostrium_kinetic.sim.trace import (
+    SPANS_FILE,
+    TRACE_FILE,
+    planned_progress,
+    span_progress,
+    stopped_progress,
+)
 
 MS = Fraction(1, 1000)
 
@@ -288,3 +294,73 @@ def test_last_span_of_returns_the_latest_ended_span() -> None:
     last = trace.last_span_of("packet:2", 2812)
     assert last is not None and last.attrs["via"] == "link:S" and last.outcome == "completed"
     assert trace.last_span_of("packet:1", 3000).outcome == "lost"  # type: ignore[union-attr]
+
+
+# -- planned end ------------------------------------------------------------------------
+
+
+def _planned_trace() -> Trace:
+    """tx:cut linear 100..150 planned 200 (lost); ramp:cut curve 100..150 planned 300
+    (aborted), keys (0,0) (1/2,1/4) (1,1); tx:full linear 100..200 planned 200."""
+    w = World(MS)
+    rec = w.rec
+    rec.entity_type("packet", status="str")
+    for name in ("cut", "ramp", "full"):
+        rec.create(f"packet:{name}", status="in_flight")
+    w.now = 100
+    rec.begin("tx:cut", "packet:cut", "transit", planned_end=200)
+    keys = [(0, 0), ("1/2", "1/4"), (1, 1)]
+    rec.begin("ramp:cut", "packet:ramp", "ramp", interp="curve:e", keys=keys, planned_end=300)
+    rec.begin("tx:full", "packet:full", "transit", planned_end=200)
+    w.now = 150
+    rec.end("tx:cut", Outcome.LOST)
+    rec.end("ramp:cut", Outcome.ABORTED)
+    w.now = 200
+    rec.end("tx:full")
+    return _trace_from(w)
+
+
+def test_planned_progress_over_the_planned_interval() -> None:
+    trace = _planned_trace()
+    by_id = {s.span_id: s for s in trace.spans}
+    cut, ramp, full = by_id["tx:cut"], by_id["ramp:cut"], by_id["tx:full"]
+    # The actual-interval progress is unchanged (reaches 1 at the cut) ...
+    assert span_progress(cut, 149) == Fraction(49, 50)
+    # ... the planned progress stops halfway along.
+    assert planned_progress(cut, 149) == Fraction(49, 100)
+    assert stopped_progress(cut) == Fraction(1, 2)
+    # Curve keys are evaluated at u over the planned interval: u = 50/200 = 1/4 -> p = 1/8.
+    assert planned_progress(ramp, 150) == Fraction(1, 8)
+    assert stopped_progress(ramp) == Fraction(1, 8)
+    # A span that ran to its planned end: planned progress == progress, stops at 1.
+    for t in (100, 137, 199):
+        assert planned_progress(full, t) == span_progress(full, t)
+    assert stopped_progress(full) == 1
+
+    active = trace.active_span_of("packet:cut", 125)
+    assert active is not None
+    assert (active.progress, active.planned_progress) == (Fraction(1, 2), Fraction(1, 4))
+
+
+def test_planned_progress_without_planned_end_equals_progress(trace: Trace) -> None:
+    for t in (100, 150, 199):
+        for active in trace.spans_active(t):
+            assert active.span.planned_end_tick is None
+            assert active.planned_progress == active.progress
+    by_id = {s.span_id: s for s in trace.spans}
+    assert stopped_progress(by_id["tx:1"]) == 1
+    assert stopped_progress(by_id["hold:1"]) == 0  # step: no continuous progress
+
+
+def test_trace_without_planned_end_is_byte_identical_to_before(cached_trace_dir: Path) -> None:
+    """planned_end_tick is omitted when unset, so sims that do not use it keep their bytes."""
+    spans = (cached_trace_dir / SPANS_FILE).read_bytes()
+    assert spans == (
+        b'{"attrs":{},"begin_tick":0,"end_tick":250,"entity":"packet:1","interp":"linear",'
+        b'"kind":"transit","outcome":"completed","span_id":"tx:1"}\n'
+    )
+    begin = (cached_trace_dir / TRACE_FILE).read_bytes().splitlines()[1]
+    assert begin == (
+        b'{"entity":"packet:1","interp":"linear","kind":"transit","seq":1,"span_id":"tx:1",'
+        b'"tick":0,"type":"span.begin"}'
+    )

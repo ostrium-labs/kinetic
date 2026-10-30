@@ -136,10 +136,15 @@ class Recorder:
         interp: str = "linear",
         keys: Sequence[tuple[Any, Any]] | None = None,
         attrs: Mapping[str, Scalar] | None = None,
+        planned_end: int | None = None,
         **kw_attrs: Scalar,
     ) -> None:
         """Open a span. Attributes go in `attrs` (needed for names like "from", "kind" or
-        "interp") and/or as keyword arguments; a name given both ways is an error."""
+        "interp") and/or as keyword arguments; a name given both ways is an error.
+
+        `planned_end` is the tick the span is planned to end on (e.g. now + link latency). A
+        span may end earlier (cut short) but not later; renderers place an interrupted span by
+        its planned progress, so a lost packet stops where it was cut."""
         clash = set(attrs or {}) & set(kw_attrs)
         if clash:
             raise SimulationError(f"span {span_id!r}: attribute(s) given twice: {sorted(clash)}")
@@ -148,6 +153,16 @@ class Recorder:
         if span_id in self._span_ids:
             raise SimulationError(f"span id {span_id!r} reused")
         norm_keys = _check_interp(span_id, interp, keys)
+        if planned_end is not None:
+            if interp == "step":
+                raise SimulationError(f"span {span_id!r}: planned_end is not allowed with 'step'")
+            if isinstance(planned_end, bool) or not isinstance(planned_end, int):
+                raise SimulationError(f"span {span_id!r}: planned_end must be an integer tick")
+            if planned_end <= self._world.now:
+                raise SimulationError(
+                    f"span {span_id!r}: planned_end {planned_end} must be after the begin "
+                    f"tick {self._world.now}"
+                )
         for key, value in attrs.items():
             _check_scalar(f"{span_id}.{key}", value)
         self._span_ids.add(span_id)
@@ -156,6 +171,7 @@ class Recorder:
             "kind": kind,
             "interp": interp,
             "keys": norm_keys,
+            "planned_end_tick": planned_end,
             "attrs": dict(attrs),
             "begin_tick": self._world.now,
         }
@@ -166,6 +182,7 @@ class Recorder:
             kind=kind,
             interp=interp,
             keys=norm_keys,
+            planned_end_tick=planned_end,
             attrs=dict(attrs) or None,
         )
 
@@ -179,6 +196,11 @@ class Recorder:
             raise SimulationError(f"span {span_id!r}: unknown outcome {outcome!r}") from exc
         if self._world.now == span["begin_tick"] and span["interp"] != "step":
             raise SimulationError(f"span {span_id!r} has zero duration; use interp='step'")
+        planned = span["planned_end_tick"]
+        if planned is not None and self._world.now > planned:
+            raise SimulationError(
+                f"span {span_id!r} ends at tick {self._world.now}, after its planned end {planned}"
+            )
         del self._open[span_id]  # only once the end is known to be valid
         self._spans.append(
             Span(
@@ -190,6 +212,7 @@ class Recorder:
                 outcome=outcome,
                 interp=span["interp"],
                 keys=span["keys"],
+                planned_end_tick=planned,
                 attrs=span["attrs"],
             )
         )

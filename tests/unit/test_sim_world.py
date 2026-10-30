@@ -429,3 +429,52 @@ def test_begin_rejects_attribute_given_twice(rec: Recorder) -> None:
     with pytest.raises(SimulationError, match="given twice"):
         rec.begin("tx:1", "packet:1", "transit", attrs={"via": "a"}, via="b")
     assert not rec.is_open("tx:1")
+
+
+# -- planned end ------------------------------------------------------------------------
+
+
+def test_planned_end_recorded_on_begin_and_span(world: World, rec: Recorder) -> None:
+    rec.create("packet:1", status="in_flight")
+    world.now = 10
+    rec.begin("tx:1", "packet:1", "transit", planned_end=110)
+    assert rec.events[-1].planned_end_tick == 110
+    world.now = 60
+    rec.end("tx:1", Outcome.LOST)
+    assert rec.events[-1].planned_end_tick is None  # only on span.begin
+    (span,) = rec.finish()
+    assert (span.begin_tick, span.end_tick, span.planned_end_tick) == (10, 60, 110)
+
+
+@pytest.mark.parametrize("planned_end", [9, 10])
+def test_planned_end_must_be_after_begin(world: World, rec: Recorder, planned_end: int) -> None:
+    rec.create("packet:1", status="in_flight")
+    world.now = 10
+    with pytest.raises(SimulationError, match="must be after the begin tick 10"):
+        rec.begin("tx:1", "packet:1", "transit", planned_end=planned_end)
+    assert not rec.is_open("tx:1")
+
+
+def test_planned_end_rejected_for_step(rec: Recorder) -> None:
+    rec.create("packet:1", status="in_flight")
+    with pytest.raises(SimulationError, match="not allowed with 'step'"):
+        rec.begin("hold:1", "packet:1", "hold", interp="step", planned_end=5)
+
+
+@pytest.mark.parametrize("planned_end", [True, 5.0, "5"])
+def test_planned_end_must_be_an_int(rec: Recorder, planned_end: Any) -> None:
+    rec.create("packet:1", status="in_flight")
+    with pytest.raises(SimulationError, match="integer tick"):
+        rec.begin("tx:1", "packet:1", "transit", planned_end=planned_end)
+
+
+def test_span_cannot_end_after_its_planned_end(world: World, rec: Recorder) -> None:
+    rec.create("packet:1", status="in_flight")
+    rec.begin("tx:1", "packet:1", "transit", planned_end=100)
+    world.now = 101
+    with pytest.raises(SimulationError, match="after its planned end 100"):
+        rec.end("tx:1")
+    assert rec.is_open("tx:1")
+    world.now = 100
+    rec.end("tx:1")
+    assert rec.finish()[0].planned_end_tick == 100

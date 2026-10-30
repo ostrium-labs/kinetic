@@ -25,13 +25,12 @@ META_SHA_FILE = "trace.meta.sha256"  # sidecar: the meta cannot contain its own 
 class ActiveSpan:
     span: Span
     progress: Fraction  # 0 <= progress < 1 while active
+    planned_progress: Fraction  # progress over the planned interval; == progress without one
 
 
-def span_progress(span: Span, tick: int) -> Fraction:
-    """Progress of `span` at `tick`, by its interpolation mode. Caller ensures it is active."""
+def _interp_at(span: Span, u: Fraction) -> Fraction:
     if span.interp == "step":
         return Fraction(0)
-    u = Fraction(tick - span.begin_tick, span.end_tick - span.begin_tick)
     if span.interp == "linear":
         return u
     keys = span.keys or []
@@ -39,6 +38,33 @@ def span_progress(span: Span, tick: int) -> Fraction:
         if u0 <= u <= u1:
             return p0 + (p1 - p0) * (u - u0) / (u1 - u0)
     raise ValueError(f"span {span.span_id}: u={u} outside curve keys")
+
+
+def span_progress(span: Span, tick: int) -> Fraction:
+    """Progress of `span` at `tick` through its actual interval [begin_tick, end_tick], by its
+    interpolation mode. Caller ensures it is active. A span cut short reaches 1 at the cut;
+    use `planned_progress` to place an entity on an interrupted path."""
+    if span.interp == "step":
+        return Fraction(0)
+    return _interp_at(span, Fraction(tick - span.begin_tick, span.end_tick - span.begin_tick))
+
+
+def planned_progress(span: Span, tick: int) -> Fraction:
+    """Progress of `span` at `tick` over its planned interval [begin_tick, planned_end_tick],
+    with the span's interp applied there. Equal to `span_progress` when the span has no
+    planned end. Defined for begin_tick <= tick <= end_tick (end_tick <= planned_end_tick)."""
+    if span.planned_end_tick is None or span.interp == "step":
+        return span_progress(span, tick)
+    return _interp_at(
+        span, Fraction(tick - span.begin_tick, span.planned_end_tick - span.begin_tick)
+    )
+
+
+def stopped_progress(span: Span) -> Fraction:
+    """Where an ended span stopped: its planned progress at end_tick. For a span cut short
+    this is the position of the cut (e.g. 1200/1488 for the lost failover packet); for a span
+    that ran to its planned end (or has none) it is the progress at its end (1 for linear)."""
+    return planned_progress(span, span.end_tick)
 
 
 class Trace:
@@ -93,14 +119,15 @@ class Trace:
     def spans_active(self, tick: int) -> list[ActiveSpan]:
         """Spans with begin_tick <= tick < end_tick. A span is no longer active on its end tick."""
         return [
-            ActiveSpan(span, span_progress(span, tick))
+            ActiveSpan(span, span_progress(span, tick), planned_progress(span, tick))
             for span in self.spans
             if span.begin_tick <= tick < span.end_tick
         ]
 
     def last_span_of(self, entity: str, tick: int) -> Span | None:
         """The entity's most recent span that has ended by `tick` (end_tick <= tick); ties go
-        to the later one in spans.jsonl order. Shows where an entity ended up."""
+        to the later one in spans.jsonl order. Shows where an entity ended up; place it with
+        `stopped_progress(span)`, which is short of 1 for a span cut before its planned end."""
         best: Span | None = None
         for span in self.spans:
             if (

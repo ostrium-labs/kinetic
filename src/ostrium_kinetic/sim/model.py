@@ -61,6 +61,7 @@ class TraceEvent(_Record):
     kind: str | None = None  # span.begin, e.g. "transit"
     interp: str | None = None  # span.begin
     keys: list[tuple[Exact, Exact]] | None = None  # span.begin with interp "curve:<name>"
+    planned_end_tick: Annotated[int, Field(ge=0)] | None = None  # span.begin, optional
     outcome: Outcome | None = None  # span.end
     attrs: dict[str, Scalar] | None = None
 
@@ -72,6 +73,11 @@ class Span(_Record):
       "step"         no continuous progress; the span is simply active
       "linear"       progress = (t - begin) / (end - begin)
       "curve:<name>" piecewise-linear over `keys` [(u, progress)], u = normalised time
+
+    planned_end_tick (optional, never with "step") is when the span was planned to end, e.g.
+    when a packet would have arrived. A span cut short (lost, aborted) ends before it, and
+    `planned_progress` measures progress over the planned interval, so an interrupted path
+    stops where it was cut instead of reaching 1.0 at the cut.
     """
 
     span_id: str
@@ -82,6 +88,7 @@ class Span(_Record):
     outcome: Outcome
     interp: str
     keys: list[tuple[Exact, Exact]] | None = None
+    planned_end_tick: Annotated[int, Field(ge=0)] | None = None
     attrs: dict[str, Scalar] = Field(default_factory=dict)
 
 

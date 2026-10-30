@@ -84,7 +84,9 @@ class EntityAnnotation(_Model):
     """What the renderer drew for one tracked entity on one frame."""
 
     state: dict[str, Scalar] = Field(default_factory=dict)  # as the renderer read it
-    active_span: dict[str, Scalar] | None = None  # span fields + attrs + "progress" (float)
+    active_span: dict[str, Scalar] | None = (
+        None  # span fields + attrs + "progress", "planned_progress"
+    )
     bbox: tuple[float, float, float, float] | None = None  # x0, y0, x1, y1 px, origin top-left
     visible: bool = False  # bbox intersects the frame and the node is visible
 

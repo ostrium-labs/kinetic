@@ -11,7 +11,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "One line of spans.jsonl: a resolved interval, so renderers never need lookahead.\n\ninterp:\n  \"step\"         no continuous progress; the span is simply active\n  \"linear\"       progress = (t - begin) / (end - begin)\n  \"curve:<name>\" piecewise-linear over `keys` [(u, progress)], u = normalised time",
+  "description": "One line of spans.jsonl: a resolved interval, so renderers never need lookahead.\n\ninterp:\n  \"step\"         no continuous progress; the span is simply active\n  \"linear\"       progress = (t - begin) / (end - begin)\n  \"curve:<name>\" piecewise-linear over `keys` [(u, progress)], u = normalised time\n\nplanned_end_tick (optional, never with \"step\") is when the span was planned to end, e.g.\nwhen a packet would have arrived. A span cut short (lost, aborted) ends before it, and\n`planned_progress` measures progress over the planned interval, so an interrupted path\nstops where it was cut instead of reaching 1.0 at the cut.",
   "properties": {
     "attrs": {
       "additionalProperties": {
@@ -110,6 +110,19 @@
     },
     "outcome": {
       "$ref": "#/$defs/Outcome"
+    },
+    "planned_end_tick": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Planned End Tick"
     },
     "span_id": {
       "title": "Span Id",
